@@ -1,120 +1,132 @@
 # CopilotKit <> Microsoft Agent Framework (Python)
 
-This starter pairs the [CopilotKit](https://copilotkit.ai) frontend runtime with the [Microsoft Agent Framework (MAF)](https://aka.ms/agent-framework) over the AG-UI protocol. You get:
-
-- A Next.js 15 UI that demonstrates shared state, frontend actions, generative UI, and human-in-the-loop flows.
-- A FastAPI server powered by Microsoft Agent Framework and `agent-framework-ag-ui`.
-- Scripts that spin up everything locally so you can copy/paste the pattern into your own applications.
+This is a starter template for building CopilotKit experiences using the [Microsoft Agent Framework](https://aka.ms/agent-framework). It ships with a Next.js UI and a FastAPI server that exposes a Microsoft Agent Framework agent over the AG-UI protocol, so you can study and customize both sides of the stack.
 
 ## Prerequisites
 
-- Node.js 20+ and your preferred package manager (examples below use pnpm)
+- OpenAI or Azure OpenAI credentials (for the Microsoft Agent Framework agent)
 - Python 3.12+
-- [uv](https://docs.astral.sh/uv/) for Python dependency management
-- Either:
-  - **OpenAI** – `OPENAI_API_KEY` and `OPENAI_CHAT_MODEL_ID`
-  - **Azure OpenAI** – `MAF_PROVIDER=azure`, `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_CHAT_DEPLOYMENT_NAME`, plus either `AZURE_OPENAI_API_KEY` or `az login`
+- uv
+- Node.js 20+ 
+- Any of the following package managers:
+  - pnpm (recommended)
+  - npm
+  - yarn
+  - bun
 
-> **Lockfiles:** JS lockfiles are ignored so teams can pick pnpm/yarn/npm/bun without conflicts. Commit your own if your workflow needs it.
+> **Note:** This repository ignores lock files (package-lock.json, yarn.lock, pnpm-lock.yaml, bun.lockb) to avoid conflicts between different package managers. Each developer should generate their own lock file using their preferred package manager. After that, make sure to delete it from the .gitignore.
 
 ## Getting Started
 
-1. **Install frontend dependencies**
+1. Install dependencies using your preferred package manager:
 
    ```bash
-   pnpm install    # or npm install / yarn install / bun install
+   # Using pnpm (recommended)
+   pnpm install
+
+   # Using npm
+   npm install
+
+   # Using yarn
+   yarn install
+
+   # Using bun
+   bun install
    ```
 
-   The `postinstall` hook runs `uv sync` inside `agent/` so Microsoft Agent Framework packages are ready. Need to rerun manually? `npm run install:agent`.
+   > **Note:** This automatically sets up the Python environment as well.
+   >
+   > If you have manual issues, you can run:
+   >
+   > ```sh
+   > npm run install:agent
+   > ```
 
-2. **Configure the agent**
+2. Set up your agent credentials. The backend automatically uses Azure when the Azure env vars below are present; otherwise it falls back to OpenAI. Create a `.env` file inside the `agent` folder with one of the following configurations:
 
-   Create `agent/.env` with the credentials for your provider.
-
-   **OpenAI example**
-
-   ```env
-   OPENAI_API_KEY=sk-...
+   **OpenAI**
+   ```
+   OPENAI_API_KEY=sk-...your-openai-key-here...
    OPENAI_CHAT_MODEL_ID=gpt-4o-mini
    ```
 
-   **Azure OpenAI example**
-
-   ```env
-   MAF_PROVIDER=azure
-   AZURE_OPENAI_ENDPOINT=https://my-resource.openai.azure.com/
+   **Azure OpenAI**
+   ```
+   AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
    AZURE_OPENAI_CHAT_DEPLOYMENT_NAME=gpt-4o-mini
    # If you are not relying on az login:
    # AZURE_OPENAI_API_KEY=...
    ```
 
-3. **Run everything**
+3. Start the development server:
 
    ```bash
+   # Using pnpm
    pnpm dev
+
+   # Using npm
+   npm run dev
+
+   # Using yarn
+   yarn dev
+
+   # Using bun
+   bun run dev
    ```
 
-   This launches both the Next.js UI (`http://localhost:3000`) and the FastAPI + MAF backend (`http://localhost:8000`).
+   This will start both the UI and the Microsoft Agent Framework server concurrently.
 
 ## Available Scripts
 
-| Script         | Description                                                                          |
-| -------------- | ------------------------------------------------------------------------------------ |
-| `dev`          | Runs the Next.js UI and the Microsoft Agent Framework server                         |
-| `dev:debug`    | Same as `dev`, but with verbose logging                                              |
-| `dev:ui`       | Starts only the Next.js app                                                          |
-| `dev:agent`    | Starts only the MAF FastAPI server (`uv run src/main.py`)                            |
-| `build`        | Builds the Next.js app                                                               |
-| `start`        | Runs the built Next.js app in production mode                                        |
-| `lint`         | Runs ESLint                                                                          |
-| `install:agent`| Re-syncs the Python virtual environment using uv                                     |
+The following scripts can also be run using your preferred package manager:
 
-## Agent Structure
+- `dev` – Starts both UI and agent servers in development mode
+- `dev:debug` – Starts development servers with debug logging enabled
+- `dev:ui` – Starts only the Next.js UI server
+- `dev:agent` – Starts only the Microsoft Agent Framework server
+- `build` – Builds the Next.js application for production
+- `start` – Starts the production server
+- `lint` – Runs ESLint for code linting
+- `install:agent` – Installs Python dependencies for the agent
 
-- `agent/src/agent.py` – defines the Microsoft Agent Framework `ChatAgent`, tools, and shared-state schema.  
-- `agent/src/main.py` – exposes that agent through FastAPI with `add_agent_framework_fastapi_endpoint`.  
-- `agent/pyproject.toml` & `uv.lock` – lock Microsoft Agent Framework + AG-UI dependencies.
+## Documentation
 
-Highlights:
+The main UI component is in `src/app/page.tsx`. You can:
 
-- **Shared state:** the proverb list stays synced with the UI via AG-UI state events.  
-- **Frontend actions:** `get_weather` renders a weather card entirely from agent-side tool calls.  
-- **Human in the loop:** `go_to_moon` requires approval, showcasing `approval_mode="always_require"`.
+- Modify the theme colors and styling
+- Add new frontend actions
+- Customize the CopilotKit sidebar appearance
 
-## Updating the UI
+## 📚 Documentation
 
-The main CopilotKit experience lives in `src/app/page.tsx`. Feel free to:
+- [Microsoft Agent Framework](https://aka.ms/agent-framework) – Learn more about Microsoft Agent Framework and its features
+- [CopilotKit Documentation](https://docs.copilotkit.ai) – Explore CopilotKit’s capabilities
+- [Next.js Documentation](https://nextjs.org/docs) – Learn about Next.js features and API
 
-- Change or add cards in `src/components/`.
-- Register new frontend actions with `useCopilotAction`.
-- Customize the Copilot Sidebar theme and suggestions.
+## Contributing
 
-## Troubleshooting
-
-- **“I’m having trouble connecting to my tools”**
-  1. Make sure the FastAPI server (`uv run src/main.py`) is running on `http://localhost:8000`.
-  2. Confirm the URL in `src/app/api/copilotkit/route.ts` points to the correct agent endpoint.
-  3. Verify your environment variables—the Microsoft Agent Framework client will fail fast if credentials are missing.
-
-- **Python dependency hiccups**
-
-  ```bash
-  cd agent
-  uv sync
-  uv run src/main.py
-  ```
-
-- **Switching providers**
-  - Set/unset `MAF_PROVIDER=azure` inside `agent/.env`.
-  - Restart `pnpm dev`.
-  - If you rely on `az login`, run it before starting the server.
-
-## Useful Links
-
-- [Microsoft Agent Framework](https://aka.ms/agent-framework)
-- [CopilotKit Documentation](https://docs.copilotkit.ai)
-- [Build a frontend for your Microsoft Agent Framework agents with AG-UI](https://www.copilotkit.ai/blog/build-a-frontend-for-your-microsoft-agent-framework-agents-with-ag-ui)
+Feel free to submit issues and enhancement requests! This starter is designed to be easily extensible.
 
 ## License
 
-MIT – see `LICENSE` for details.
+This project is licensed under the MIT License – see the LICENSE file for details.
+
+## Troubleshooting
+
+### Agent Connection Issues
+
+If you see "I'm having trouble connecting to my tools", make sure:
+
+1. The Microsoft Agent Framework agent is running on port 8000
+2. Your OpenAI/Azure credentials are set correctly
+3. Both servers started successfully
+
+### Python Dependencies
+
+If you encounter Python import errors:
+
+```bash
+cd agent
+uv sync
+uv run src/main.py
+```
