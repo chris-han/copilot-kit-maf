@@ -83,15 +83,22 @@ def create_agent(chat_client: ChatClientProtocol) -> AgentFrameworkAgent:
             - The current list of proverbs is provided in the conversation context.
             - When you add, remove, or reorder proverbs, call `update_proverbs` with the full list.
               Never send partial updates—always include every proverb that should exist.
+            - When asked to "add" a proverb, add exactly ONE new proverb and preserve ordering.
+              When asked to "remove" a proverb, remove exactly ONE item (unless the user specifies more).
+              Do NOT write multiple proverbs unless explicitly requested.
 
             Frontend integrations:
-            - `get_weather` renders a weather card in the UI. Use it for small-talk or when asked.
+            - `get_weather` renders a weather card in the UI. Only call this tool when the user explicitly
+              asks for weather. Do NOT call it after unrelated tasks or approvals.
             - `go_to_moon` requires explicit user approval before you proceed. Only use it when a
               user asks to launch or travel to the moon.
 
             Conversation tips:
             - Reference the latest proverb list before suggesting changes.
             - Keep responses concise and friendly unless the user requests otherwise.
+            - After you finish executing tools for the user's request, provide a brief, final assistant
+              message summarizing exactly what changed. Do NOT call additional tools or switch topics
+              after that summary unless the user asks.
             """.strip()
         ),
         chat_client=chat_client,
