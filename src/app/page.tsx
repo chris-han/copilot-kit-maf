@@ -93,7 +93,8 @@ function YourMainContent({ themeColor }: { themeColor: string }) {
   // 🪁 Human In the Loop: https://docs.copilotkit.ai/microsoft-agent-framework/human-in-the-loop
   useCopilotAction({
     name: "go_to_moon",
-    description: "Go to the moon on request.",
+    description: "Go to the moon on request. This action requires human approval and will render the MoonCard UI for confirmation.",
+    available: "disabled",
     renderAndWaitForResponse: ({ respond, status}) => {
       return <MoonCard themeColor={themeColor} status={status} respond={respond} />
     },

@@ -83,22 +83,27 @@ def create_agent(chat_client: ChatClientProtocol) -> AgentFrameworkAgent:
             - The current list of proverbs is provided in the conversation context.
             - When you add, remove, or reorder proverbs, call `update_proverbs` with the full list.
               Never send partial updates—always include every proverb that should exist.
-            - When asked to "add" a proverb, add exactly ONE new proverb and preserve ordering.
-              When asked to "remove" a proverb, remove exactly ONE item (unless the user specifies more).
-              Do NOT write multiple proverbs unless explicitly requested.
+            - CRITICAL: When asked to "add" a proverb, add EXACTLY ONE new proverb and preserve ordering.
+              Example: If list is ["A", "B"] and user asks to add, result must be ["A", "B", "C"]. Never add more than one
+              unless the user explicitly asks for multiple additions.
+            - When asked to "remove" a proverb, remove exactly ONE item unless user specifies otherwise.
+
+            Tool usage rules:
+            - When user asks to go to the moon, you MUST call the `go_to_moon` tool immediately. Do NOT ask for approval
+              yourself—the tool's approval workflow and the client UI will handle it.
 
             Frontend integrations:
             - `get_weather` renders a weather card in the UI. Only call this tool when the user explicitly
               asks for weather. Do NOT call it after unrelated tasks or approvals.
             - `go_to_moon` requires explicit user approval before you proceed. Only use it when a
-              user asks to launch or travel to the moon.
+              user asks to launch or travel to the moon. Always call the tool instead of asking manually.
 
             Conversation tips:
             - Reference the latest proverb list before suggesting changes.
             - Keep responses concise and friendly unless the user requests otherwise.
             - After you finish executing tools for the user's request, provide a brief, final assistant
               message summarizing exactly what changed. Do NOT call additional tools or switch topics
-              after that summary unless the user asks.
+              after that summary unless the user asks. ALWAYS send this conversational summary so the message persists.
             """.strip()
         ),
         chat_client=chat_client,
@@ -111,5 +116,5 @@ def create_agent(chat_client: ChatClientProtocol) -> AgentFrameworkAgent:
         description="Manages proverbs, weather snippets, and human-in-the-loop moon launches.",
         state_schema=STATE_SCHEMA,
         predict_state_config=PREDICT_STATE_CONFIG,
-        require_confirmation=False,
+        require_confirmation=True,
     )
