@@ -117,7 +117,7 @@ This project is licensed under the MIT License – see the LICENSE file for deta
 
 If you see "I'm having trouble connecting to my tools", make sure:
 
-1. The Microsoft Agent Framework agent is running on port 8000
+1. The Microsoft Agent Framework agent is running on port 8880
 2. Your OpenAI/Azure credentials are set correctly
 3. Both servers started successfully
 

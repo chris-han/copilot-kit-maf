@@ -64,5 +64,5 @@ add_agent_framework_fastapi_endpoint(
 
 if __name__ == "__main__":
     host = os.getenv("AGENT_HOST", "0.0.0.0")
-    port = int(os.getenv("AGENT_PORT", "8000"))
+    port = int(os.getenv("AGENT_PORT", "8880"))
     uvicorn.run("main:app", host=host, port=port, reload=True)
