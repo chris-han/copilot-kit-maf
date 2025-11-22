@@ -1,10 +1,10 @@
 // Lucide Icons mapping to replace the custom SVG icons
-import { 
-  ChevronLeft, 
-  Eye, 
-  EyeOff, 
-  Clock, 
-  MoreVertical, 
+import {
+  ChevronLeft,
+  Eye,
+  EyeOff,
+  Clock,
+  MoreVertical,
   Video,
   AudioWaveform,
   File,
@@ -47,6 +47,11 @@ import {
   Phone,
   Truck,
   TrendingUp,
+  MoreHorizontal,
+  Star,
+  Users,
+  Brain,
+  Package,
   EyeIcon as LucideEye, // Renamed to avoid conflict
   Calendar as CalendarIcon,
   Mail as MailIcon,
@@ -112,14 +117,29 @@ export {
   LucideEye as EyeIcon,
   CalendarIcon as CalenderIcon,
   MailIcon as EnvelopeIcon,
-  UserIcon as UserIcon,
+  MailIcon, // Export the MailIcon that was imported as Mail
   FileIcon,
   FolderIcon,
   MessageIcon as ChatIcon,
-  CartIcon as CartIcon,
   PhoneIcon as CallIcon,
+  PhoneIcon, // Also export PhoneIcon directly
   TruckIcon as TruckDelivery,
-  TrendingUpIcon as ShootingStarIcon
+  TruckIcon, // Also export TruckIcon directly
+  TrendingUpIcon as ShootingStarIcon,
+  TrendingUpIcon, // Also export TrendingUpIcon directly
+  // Additional mappings for named imports
+  MoreHorizontal as HorizontaLDots,
+  Package as BoxCubeIcon, // BoxCube maps to Package, so BoxCubeIcon also maps to Package
+  Grid3X3 as GridIcon, // Map GridIcon to Grid3X3
+  Box as BoxIcon,
+  ChevronDown as ChevronDownIcon,
+  ChevronDown as AngleDownIcon,
+  ChevronUp as AngleUpIcon,
+  ArrowDown as ArrowDownIcon,
+  ArrowUp as ArrowUpIcon,
+  Box as BoxIconLine,
+  Users as GroupIcon,
+  Brain as AiIcon // Map Brain to AiIcon
 };
 
 // For the remaining icons, we'll use generic placeholders for now

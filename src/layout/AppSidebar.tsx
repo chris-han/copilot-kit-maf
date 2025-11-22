@@ -13,188 +13,26 @@ import {
   ChatIcon,
   ChevronDownIcon,
   GridIcon,
-  HorizontaLDots,
-  ListIcon,
+  ShootingStarIcon,
+  List,
+  Table,
+  FileText,
+  PieChart,
+  Box,
+  Plug,
+  Send,
+  Copy,
+  Smartphone,
+  ShoppingCart,
+  Phone,
+  Truck,
+  TrendingUp,
   MailIcon,
-  PageIcon,
-  PieChartIcon,
-  PlugInIcon,
-  TableIcon,
-  TaskIcon,
-  UserCircleIcon,
-} from "../icons/index";
-import SidebarWidget from "./SidebarWidget";
-
-type NavItem = {
-  name: string;
-  icon: React.ReactNode;
-  path?: string;
-  new?: boolean;
-  subItems?: { name: string; path: string; pro?: boolean; new?: boolean }[];
-};
-
-const navItems: NavItem[] = [
-  {
-    icon: <GridIcon />,
-    name: "Dashboard",
-    subItems: [
-      { name: "Ecommerce", path: "/" },
-      { name: "Analytics", path: "/analytics" },
-      { name: "Marketing", path: "/marketing" },
-      { name: "CRM", path: "/crm" },
-      { name: "Stocks", path: "/stocks" },
-      { name: "SaaS", path: "/saas", new: true },
-      { name: "Logistics", path: "/logistics", new: true },
-    ],
-  },
-  {
-    name: "AI Assistant",
-    icon: <AiIcon />,
-    new: true,
-    subItems: [
-      {
-        name: "Text Generator",
-        path: "/text-generator",
-      },
-      {
-        name: "Image Generator",
-        path: "/image-generator",
-      },
-      {
-        name: "Code Generator",
-        path: "/code-generator",
-      },
-      {
-        name: "Video Generator",
-        path: "/video-generator",
-      },
-    ],
-  },
-  {
-    name: "E-commerce",
-    icon: <CartIcon />,
-    new: true,
-    subItems: [
-      { name: "Products", path: "/products" },
-      { name: "Add Product", path: "/add-product" },
-      { name: "Billing", path: "/billing" },
-      { name: "Invoices", path: "/invoices" },
-      { name: "Single Invoice", path: "/single-invoice" },
-      { name: "Create Invoice", path: "/create-invoice" },
-      { name: "Transactions", path: "/transactions" },
-      { name: "Single Transaction", path: "/single-transaction" },
-    ],
-  },
-  {
-    icon: <CalenderIcon />,
-    name: "Calendar",
-    path: "/calendar",
-  },
-  {
-    icon: <UserCircleIcon />,
-    name: "User Profile",
-    path: "/profile",
-  },
-  {
-    name: "Task",
-    icon: <TaskIcon />,
-    subItems: [
-      { name: "List", path: "/task-list", pro: true },
-      { name: "Kanban", path: "/task-kanban", pro: true },
-    ],
-  },
-  {
-    name: "Forms",
-    icon: <ListIcon />,
-    subItems: [
-      { name: "Form Elements", path: "/form-elements", pro: false },
-      { name: "Form Layout", path: "/form-layout", pro: true },
-    ],
-  },
-  {
-    name: "Tables",
-    icon: <TableIcon />,
-    subItems: [
-      { name: "Basic Tables", path: "/basic-tables", pro: false },
-      { name: "Data Tables", path: "/data-tables", pro: true },
-    ],
-  },
-  {
-    name: "Pages",
-    icon: <PageIcon />,
-    subItems: [
-      { name: "File Manager", path: "/file-manager" },
-      { name: "Pricing Tables", path: "/pricing-tables" },
-      { name: "FAQ", path: "/faq" },
-      { name: "API Keys", path: "/api-keys", new: true },
-      { name: "Integrations", path: "/integrations", new: true },
-      { name: "Blank Page", path: "/blank" },
-      { name: "404 Error", path: "/error-404" },
-      { name: "500 Error", path: "/error-500" },
-      { name: "503 Error", path: "/error-503" },
-      { name: "Coming Soon", path: "/coming-soon" },
-      { name: "Maintenance", path: "/maintenance" },
-      { name: "Success", path: "/success" },
-    ],
-  },
-];
-
-const othersItems: NavItem[] = [
-  {
-    icon: <PieChartIcon />,
-    name: "Charts",
-    subItems: [
-      { name: "Line Chart", path: "/line-chart", pro: true },
-      { name: "Bar Chart", path: "/bar-chart", pro: true },
-      { name: "Pie Chart", path: "/pie-chart", pro: true },
-    ],
-  },
-  {
-    icon: <BoxCubeIcon />,
-    name: "UI Elements",
-    subItems: [
-      { name: "Alerts", path: "/alerts" },
-      { name: "Avatar", path: "/avatars" },
-      { name: "Badge", path: "/badge" },
-      { name: "Breadcrumb", path: "/breadcrumb" },
-      { name: "Buttons", path: "/buttons" },
-      { name: "Buttons Group", path: "/buttons-group" },
-      { name: "Cards", path: "/cards" },
-      { name: "Carousel", path: "/carousel" },
-      { name: "Dropdowns", path: "/dropdowns" },
-      { name: "Images", path: "/images" },
-      { name: "Links", path: "/links" },
-      { name: "List", path: "/list" },
-      { name: "Modals", path: "/modals" },
-      { name: "Notification", path: "/notifications" },
-      { name: "Pagination", path: "/pagination" },
-      { name: "Popovers", path: "/popovers" },
-      { name: "Progressbar", path: "/progress-bar" },
-      { name: "Ribbons", path: "/ribbons" },
-      { name: "Spinners", path: "/spinners" },
-      { name: "Tabs", path: "/tabs" },
-      { name: "Tooltips", path: "/tooltips" },
-      { name: "Videos", path: "/videos" },
-    ],
-  },
-  {
-    icon: <PlugInIcon />,
-    name: "Authentication",
-    subItems: [
-      { name: "Sign In", path: "/signin", pro: false },
-      { name: "Sign Up", path: "/signup", pro: false },
-      { name: "Reset Password", path: "/reset-password" },
-      {
-        name: "Two Step Verification",
-        path: "/two-step-verification",
-      },
-    ],
-  },
-];
+} from "@/icons";
 
 const supportItems: NavItem[] = [
   {
-    icon: <ChatIcon />,
+    icon: <List />,
     name: "Chat",
     path: "/chat",
   },
@@ -214,6 +52,60 @@ const supportItems: NavItem[] = [
       { name: "Inbox", path: "/inbox" },
       { name: "Details", path: "/inbox-details" },
     ],
+  },
+];
+
+const navItems: NavItem[] = [
+  {
+    icon: <AiIcon />,
+    name: "Dashboard",
+    path: "/dashboard",
+  },
+  {
+    icon: <BoxCubeIcon />,
+    name: "Projects",
+    subItems: [
+      { name: "Active Projects", path: "/projects/active" },
+      { name: "Completed", path: "/projects/completed" },
+    ],
+  },
+  {
+    icon: <GridIcon />,
+    name: "UI Elements",
+    subItems: [
+      { name: "Alerts", path: "/ui/alerts" },
+      { name: "Badges", path: "/ui/badges" },
+      { name: "Buttons", path: "/ui/buttons" },
+    ],
+  },
+  {
+    icon: <CalenderIcon />,
+    name: "Calendar",
+    path: "/calendar",
+  },
+  {
+    icon: <ChatIcon />,
+    name: "Messages",
+    path: "/messages",
+  },
+];
+
+const othersItems: NavItem[] = [
+  {
+    icon: <FileText />,
+    name: "Documentation",
+    path: "/docs",
+  },
+  {
+    icon: <Smartphone />,
+    name: "Mobile App",
+    new: true,
+    path: "/mobile",
+  },
+  {
+    icon: <Plug />,
+    name: "Integrations",
+    path: "/integrations",
   },
 ];
 
@@ -494,7 +386,7 @@ const AppSidebar: React.FC = () => {
                 {isExpanded || isHovered || isMobileOpen ? (
                   "Menu"
                 ) : (
-                  <HorizontaLDots />
+                  <ShootingStarIcon />
                 )}
               </h2>
               {renderMenuItems(navItems, "main")}
@@ -510,7 +402,7 @@ const AppSidebar: React.FC = () => {
                 {isExpanded || isHovered || isMobileOpen ? (
                   "Support"
                 ) : (
-                  <HorizontaLDots />
+                  <ShootingStarIcon />
                 )}
               </h2>
               {renderMenuItems(supportItems, "support")}
@@ -526,7 +418,7 @@ const AppSidebar: React.FC = () => {
                 {isExpanded || isHovered || isMobileOpen ? (
                   "Others"
                 ) : (
-                  <HorizontaLDots />
+                  <ShootingStarIcon />
                 )}
               </h2>
               {renderMenuItems(othersItems, "others")}
@@ -538,5 +430,14 @@ const AppSidebar: React.FC = () => {
     </aside>
   );
 };
+
+const SidebarWidget = () => (
+  <div className="p-4 border-t border-gray-200 dark:border-gray-800">
+    <div className="bg-gray-100 dark:bg-gray-800 rounded-xl p-4">
+      <h3 className="font-medium text-gray-800 dark:text-white/90">Quick Stats</h3>
+      <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Your performance overview</p>
+    </div>
+  </div>
+);
 
 export default AppSidebar;

@@ -7,7 +7,7 @@ import {
   TableHeader,
   TableRow,
 } from "../ui/table";
-import { TrashBinIcon } from "../../icons";
+import { Trash2 } from "../../icons";
 import AvatarText from "../ui/avatar/AvatarText";
 import Checkbox from "../form/input/Checkbox";
 import Badge from "../ui/badge/Badge";
@@ -315,7 +315,7 @@ export default function CrmRecentOrderTable() {
                   <TableCell className="px-4 sm:px-6 py-3.5">
                     {row.actions.delete && (
                       <button>
-                        <TrashBinIcon className="text-gray-700 cursor-pointer hover:text-error-500 dark:text-gray-400 dark:hover:text-error-500" />
+                        <Trash2 className="w-4 h-4" />
                       </button>
                     )}
                   </TableCell>

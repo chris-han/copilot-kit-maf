@@ -5,7 +5,7 @@ import {
   CheckCircleIcon,
   CloseIcon,
   ErrorIcon,
-  InfoIcon,
+  Info,
 } from "../../../icons";
 
 interface NotificationProps {
@@ -33,7 +33,7 @@ const Notification: React.FC<NotificationProps> = ({
     info: {
       borderColor: "border-blue-light-500",
       iconBg: "bg-blue-light-50 text-blue-light-500",
-      icon: <InfoIcon />,
+      icon: <Info />,
     },
     warning: {
       borderColor: "border-warning-500",

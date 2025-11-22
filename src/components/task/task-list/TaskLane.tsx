@@ -4,7 +4,7 @@ import TaskItem from "./TaskItem";
 import { Task } from "./types/Task";
 import { Dropdown } from "../../ui/dropdown/Dropdown";
 import { DropdownItem } from "../../ui/dropdown/DropdownItem";
-import { HorizontaLDots } from "@/icons";
+import { ShootingStarIcon } from "@/icons";
 
 interface TaskLaneProps {
   lane: string;
@@ -55,7 +55,7 @@ const TaskLane: React.FC<TaskLaneProps> = ({
 
         <div className="relative">
           <button onClick={toggleDropdown} className="dropdown-toggle">
-            <HorizontaLDots className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-300" />
+            <ShootingStarIcon className="w-4 h-4" />
           </button>
           <Dropdown
             isOpen={isOpen}
