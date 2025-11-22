@@ -1,111 +1,27 @@
-"use client";
 
-import { ProverbsCard } from "@/components/proverbs";
-import { WeatherCard } from "@/components/weather";
-import { MoonCard } from "@/components/moon";
-import { AgentState } from "@/lib/types";
-import { useCoAgent, useCopilotAction } from "@copilotkit/react-core";
-import { CopilotKitCSSProperties, CopilotSidebar } from "@copilotkit/react-ui";
-import { useState } from "react";
+import Link from "next/link";
 
-export default function CopilotKitPage() {
-  const [themeColor, setThemeColor] = useState("#6366f1");
-
-  // 🪁 Frontend Actions: https://docs.copilotkit.ai/microsoft-agent-framework/frontend-actions
-  useCopilotAction({
-    name: "setThemeColor",
-    parameters: [{
-      name: "themeColor",
-      description: "The theme color to set. Make sure to pick nice colors.",
-      required: true, 
-    }],
-    handler({ themeColor }) {
-      setThemeColor(themeColor);
-    },
-  });
-
+export default function Home() {
   return (
-    <main style={{ "--copilot-kit-primary-color": themeColor } as CopilotKitCSSProperties}>
-      <CopilotSidebar
-        disableSystemMessage={true}
-        clickOutsideToClose={false}
-        labels={{
-          title: "Popup Assistant",
-          initial: "👋 Hi, there! You're chatting with an agent."
-        }}
-        suggestions={[
-          {
-            title: "Generative UI",
-            message: "Get the weather in San Francisco.",
-          },
-          {
-            title: "Frontend Tools",
-            message: "Set the theme to green.",
-          },
-          {
-            title: "Human In the Loop",
-            message: "Please go to the moon.",
-          },
-          {
-            title: "Write Agent State",
-            message: "Add a proverb about AI.",
-          },
-          {
-            title: "Update Agent State",
-            message: "Please remove 1 random proverb from the list if there are any.",
-          },
-          {
-            title: "Read Agent State",
-            message: "What are the proverbs?",
-          }
-        ]}
-      >
-        <YourMainContent themeColor={themeColor} />
-      </CopilotSidebar>
-    </main>
-  );
-}
-
-function YourMainContent({ themeColor }: { themeColor: string }) {
-  // 🪁 Shared State: https://docs.copilotkit.ai/microsoft-agent-framework/shared-state
-  const { state, setState } = useCoAgent<AgentState>({
-    name: "my_agent",
-    initialState: {
-      proverbs: [
-        "CopilotKit may be new, but its the best thing since sliced bread.",
-      ],
-    },
-  })
-
-  //🪁 Generative UI: https://docs.copilotkit.ai/microsoft-agent-framework/generative-ui
-  useCopilotAction({
-    name: "get_weather",
-    description: "Get the weather for a given location.",
-    available: "disabled",
-    parameters: [
-      { name: "location", type: "string", required: true },
-    ],
-    render: ({ args }) => {
-      return <WeatherCard location={args.location} themeColor={themeColor} />
-    },
-  }, [themeColor]);
-
-  // 🪁 Human In the Loop: https://docs.copilotkit.ai/microsoft-agent-framework/human-in-the-loop
-  useCopilotAction({
-    name: "go_to_moon",
-    description: "Go to the moon on request. This action requires human approval and will render the MoonCard UI for confirmation.",
-    available: "disabled",
-    renderAndWaitForResponse: ({ respond, status}) => {
-      return <MoonCard themeColor={themeColor} status={status} respond={respond} />
-    },
-  }, [themeColor]);
-
-  return (
-    <div
-      style={{ backgroundColor: themeColor }}
-      className="h-screen flex justify-center items-center flex-col transition-colors duration-300"
-    >
-      <ProverbsCard state={state} setState={setState} />
+    <div className="flex flex-col min-h-screen">
+      <header className="w-full py-4 bg-white shadow text-center">
+        <span className="text-2xl font-semibold text-blue-700">TailAdmin Pro</span>
+      </header>
+      <main className="flex flex-1 flex-col items-center justify-center p-8">
+        <h1 className="text-4xl font-bold mb-4">Welcome to TailAdmin Pro</h1>
+        <p className="text-lg text-gray-600">This is your Next.js homepage. Start building your dashboard!</p>
+        <div className="mt-8 flex gap-4">
+          <Link href="/signin">
+            <button className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition">Login</button>
+          </Link>
+          <Link href="/signup">
+            <button className="px-6 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 transition">Sign Up</button>
+          </Link>
+        </div>
+      </main>
+      <footer className="w-full py-4 bg-gray-100 text-center text-gray-500 text-sm">
+        © {new Date().getFullYear()} TailAdmin Pro. All rights reserved.
+      </footer>
     </div>
   );
 }
