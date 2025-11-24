@@ -1,18 +1,27 @@
-# Design Document
+# Design Document: MCP-Based Multi-Agent RAG System
 
-## Overview
+**Version:** 3.0 (Unified & Refined)
+**Pattern:** Hybrid Agentic Orchestration with Two-Workflow Design
+**Framework:** Microsoft Agent Framework + MCP
 
-The MCP-Based Multi-Agent RAG System is an enterprise-grade platform that coordinates multiple specialized agents to handle complex query orchestration, knowledge retrieval, answer generation, quality evaluation, and human-in-the-loop workflows. The system emphasizes three core values: deterministic routing, enforced compliance, and full observability.
+## 1. Executive Summary
 
-The architecture follows a modular design where each agent is an independent component with well-defined responsibilities. Agents communicate via the Model Context Protocol (MCP), enabling horizontal scaling, independent deployment, and clear separation of concerns. The system integrates multiple advanced frameworks including Parlant for routing, Agent Lightning for prompt optimization, LlamaIndex for document indexing, and Langfuse for observability.
+The MCP-Based Multi-Agent RAG System is an enterprise-grade platform that coordinates multiple specialized agents to handle complex query orchestration, knowledge retrieval, answer generation, quality evaluation, and human-in-the-loop workflows. This design adopts a **Two-Workflow architecture** (One-Pass Fast and Two-Pass Clarification) for deterministic routing and enforced compliance.
 
-## Architecture
+**Key Architectural Decisions:**
+1. **Bifurcated Workflow:** A fast "One-Pass" route for clear queries and a "Two-Pass" loop for ambiguity resolution
+2. **Separation of Concerns:** Parser understands Intent → Planner manages Workflows → Translator generates Queries → Experts fetch Data → Generator synthesizes Answers
+3. **RAG-on-Schema:** Translators use MCP Schema Registry to lookup DDL/metadata before generating SQL/Cypher, eliminating hallucinations
+4. **Policy-as-Code:** Parlant integrated as middleware (Python decorators/hooks) enforces compliance at every agent transition
+5. **Hybrid Communication:** Microsoft Agent Framework provides both SingleThreadedAgentRuntime (single-process) and GrpcWorkerAgentRuntime (distributed)
+
+---
+
+## 2. Architecture
 
 ### System Overview
 
-The MCP-Based Multi-Agent RAG System is built on a layered architecture that separates concerns while enabling seamless coordination between components. The system leverages Microsoft Agent Framework for agent orchestration, CopilotKit for frontend integration, and a comprehensive observability stack for monitoring and continuous improvement.
-
-### High-Level Architecture Diagram
+The system uses a layered architecture that separates concerns while enabling seamless coordination between components:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -38,19 +47,20 @@ The MCP-Based Multi-Agent RAG System is built on a layered architecture that sep
                               ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │                      Agent Orchestration Layer                      │
-│  ┌──────────────────────────────────────────────────────-────────┐  │
+│  ┌─────────────────────────────────────────────────────-─────────┐  │
 │  │              Microsoft Agent Framework                        │  │
 │  │  ┌────────────┐  ┌────────────┐  ┌────────────┐               │  │
-│  │  │Orchestrator│  │   Intent   │  │ Knowledge  │               │  │
-│  │  │   Agent    │──│   Parser   │──│ Retriever  │               │  │
+│  │  │Parser Agent│  │Planner Agent│ │Translator  │               │  │
+│  │  │ (ReAct)    │──│ (Loop)     │──│ Agent (Seq)│               │  │
 │  │  └────────────┘  └────────────┘  └────────────┘               │  │
-│  │         │              │                  │                   │  │
-│  │         ▼              ▼                  ▼                   │  │
+│  │         │              │                │                     │  │
+│  │         ▼              ▼                ▼                     │  │
 │  │  ┌────────────┐  ┌────────────┐  ┌────────────┐               │  │
-│  │  │  Answer    │  │ Evaluator  │  │   Human    │               │  │
-│  │  │ Generator  │──│   Agent    │──│   Review   │               │  │
+│  │  │  Domain    │  │  Reranker  │  │  Generator │               │  │
+│  │  │  Experts   │──│  (Fusion)  │──│  (CoT)     │               │  │
+│  │  │(Concurrent)│  │            │  │            │               │  │
 │  │  └────────────┘  └────────────┘  └────────────┘               │  │
-│  └──────────────────────────────────────────────────────-────────┘  │
+│  └───────────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -58,7 +68,7 @@ The MCP-Based Multi-Agent RAG System is built on a layered architecture that sep
 │                      Supporting Services Layer                      │
 │  ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌────────────┐     │
 │  │  Parlant   │  │   Agent    │  │ LlamaIndex │  │  Langfuse  │     │
-│  │  Routing   │  │ Lightning  │  │  Indexing  │  │  Tracing   │     │
+│  │  Policy    │  │ Lightning  │  │  Indexing  │  │  Tracing   │     │
 │  └────────────┘  └────────────┘  └────────────┘  └────────────┘     │
 └─────────────────────────────────────────────────────────────────────┘
                               │
@@ -66,8 +76,8 @@ The MCP-Based Multi-Agent RAG System is built on a layered architecture that sep
 ┌─────────────────────────────────────────────────────────────────────┐
 │                         Model Layer                                 │
 │  ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌────────────┐     │
-│  │   Azure    │  │  OpenAI    │  │ Embeddings │  │  SQLCoder  │     │
-│  │  OpenAI    │  │   GPT-4    │  │   Models   │  │  (optional)│     │
+│  │   Azure    │  │  OpenAI    │  │ Embeddings │  │ Azure AI   │     │
+│  │  OpenAI    │  │   GPT-4    │  │   Models   │  │  TTS       │     │
 │  └────────────┘  └────────────┘  └────────────┘  └────────────┘     │
 └─────────────────────────────────────────────────────────────────────┘
                               │
@@ -81,4355 +91,948 @@ The MCP-Based Multi-Agent RAG System is built on a layered architecture that sep
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-### Agent Coordination Pattern
+### Orchestration Topology
 
-The system uses a **hybrid orchestration approach** combining two complementary patterns, aligned with the **Double Diamond Design Process** and **Six Thinking Hats** framework (see `design-thinking-agent-patterns.md` for detailed integration):
+The system uses a **Directed Cyclic Graph** topology with explicit handoffs:
 
-**1. Plan-and-Execute (Orchestrator Level)**
-**2. ReAct (Individual Agent Level)**
-**3. Chain-of-Thought (Reasoning Agents)**
+```mermaid
+graph TD
+    User((User))
 
-**Design Thinking Alignment:**
-- **Discover Phase**: ReAct for exploration (Green/White/Red Hats)
-- **Define Phase**: CoT for validation (Black/Blue Hats)
-- **Develop Phase**: ReAct for strategy generation (Green/Yellow/White Hats)
-- **Deliver Phase**: CoT for evaluation (Black/Blue Hats)
+    subgraph "Phase 1: Triage & Clarification (Parser)"
+        Parser[<B>Parser Agent</B><br/>Intent Analysis & Clarification]
+        Mapper( <B>Mapper MCP</B><br/>Entity Grounding )
+        Parser -->|1. Resolve Terms| Mapper
+    end
 
-```
-┌────────────────────────────────────────────────────────────────┐
-│                    ORCHESTRATOR (Plan-and-Execute)             │
-│                                                                │
-│  Step 1: PLAN                                                  │
-│  ┌────────────────────────────────────────────────────────┐    │
-│  │ Analyze query → Create execution plan                  │    │
-│  │ • Parse intent and entities                            │    │
-│  │ • Determine agent sequence                             │    │
-│  │ • Identify dependencies                                │    │
-│  │ • Allocate resources                                   │    │
-│  └────────────────────────────────────────────────────────┘    │
-│                          │                                     │
-│                          ▼                                     │
-│  Step 2: EXECUTE (Parallel where possible)                     │
-│  ┌────────────────────────────────────────────────────────┐    │
-│  │                                                        │    │
-│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │    │
-│  │  │ Intent Parser│  │   Parlant    │  │  Knowledge   │  │    │
-│  │  │    Agent     │→ │   Routing    │→ │  Retriever   │  │    │
-│  │  │   (ReAct)    │  │ (Rule-based) │  │   (ReAct)    │  │    │
-│  │  └──────────────┘  └──────────────┘  └──────────────┘  │    │
-│  │                                              │         │    │
-│  │                                              ▼         │    │
-│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │    │
-│  │  │    Human     │  │  Evaluator   │  │   Answer     │  │    │
-│  │  │   Review     │← │    Agent     │← │  Generator   │  │    │
-│  │  │   (Manual)   │  │   (ReAct)    │  │   (ReAct)    │  │    │
-│  │  └──────────────┘  └──────────────┘  └──────────────┘  │    │
-│  │                                                        │    │
-│  └────────────────────────────────────────────────────────┘    │
-│                          │                                     │
-│                          ▼                                     │
-│  Step 3: AGGREGATE & RETURN                                    │
-│  ┌────────────────────────────────────────────────────────┐    │
-│  │ Collect results → Validate → Return answer             │    │
-│  └────────────────────────────────────────────────────────┘    │
-│                                                                │
-└────────────────────────────────────────────────────────────────┘
-```
+    subgraph "Phase 2: Planning & Policy (Planner)"
+        Planner[<B>Planner Agent</B><br/>Workflow Router]
+        Parlant( <B>Parlant Middleware</B><br/>Policy Engine )
+        Planner -.->|2. Check Policy| Parlant
+    end
 
-**Pattern Selection Rationale:**
+    subgraph "Phase 3: Translation (Translator)"
+        Translator[<B>Translator Agent</B><br/>Query Formulation]
+        Schema( <B>Schema Registry MCP</B><br/>DDL & Metadata )
+        Translator -->|3. Lookup Schema| Schema
+    end
 
-| Component | Pattern | Why |
-|-----------|---------|-----|
-| **Orchestrator** | Plan-and-Execute | • High-level coordination<br>• Clear agent dependencies<br>• Parallel execution where possible<br>• Predictable workflow |
-| **Intent Parser** | ReAct | • Iterative entity extraction<br>• Multi-step reasoning<br>• Needs tool use (context lookup)<br>• Confidence refinement through observation |
-| **Parlant Routing** | Rule-based | • Deterministic decisions<br>• Guideline matching<br>• No iteration needed |
-| **Knowledge Retriever** | ReAct | • Try multiple retrieval strategies<br>• Adapt based on results<br>• Tool use (semantic search, metadata filter)<br>• Iterative reranking |
-| **Answer Generator** | Chain-of-Thought (CoT) | • Text generation task<br>• Structured reasoning for grounding<br>• Single-pass with explicit steps<br>• No tool use needed |
-| **Evaluator** | Chain-of-Thought (CoT) | • Analytical reasoning task<br>• Multi-metric scoring<br>• Single-pass evaluation<br>• No tool use needed |
+    subgraph "Phase 4: Execution (Concurrent)"
+        ExpertSQL[<B>Structured Expert</B><br/>SQL Database]
+        ExpertVec[<B>Unstructured Expert</B><br/>Vector Store]
+        ExpertGraph[<B>Graph Expert</B><br/>Knowledge Graph]
+    end
 
-**Example: Plan-and-Execute Flow**
+    subgraph "Phase 5: Synthesis"
+        Reranker[<B>Reranker</B><br/>Fusion Service]
+        Generator[<B>Generator Agent</B><br/>Final Response]
+        Evaluator[<B>Evaluator Agent</B><br/>Quality Check]
+        HumanReview( <B>Human Review</B><br/>Quality Gate )
+    end
 
-```
-ORCHESTRATOR PLAN:
-1. Parse intent (Intent Parser Agent - ReAct)
-2. Route query (Parlant - Rule-based)
-3. Retrieve docs (Knowledge Retriever - ReAct)
-4. Generate answer (Answer Generator - CoT)
-5. Evaluate quality (Evaluator - CoT)
-6. [If needed] Human review (Manual)
+    %% PRIMARY WORKFLOW: Parser sole entry point
+    User -->|Query Input| Parser
+    Parser -->|Ambiguity Detected| User
+    User -->|Clarification| Parser
+    Parser -->|Pass Confidence Gate| Planner
 
-ORCHESTRATOR EXECUTE:
-→ Calls each agent in sequence
-→ Each agent uses appropriate pattern for its task:
-  • ReAct for tool-using agents (Intent Parser, Retriever)
-  • CoT for reasoning agents (Generator, Evaluator)
-  • Rule-based for deterministic agents (Parlant)
-→ Orchestrator aggregates results
-```
+    %% Secondary workflow (only for rejected answers)
+    Planner -->|Execution Plan| Translator
+    Translator -->|SQL Payload| ExpertSQL
+    Translator -->|Vector Payload| ExpertVec
+    Translator -->|Cypher Payload| ExpertGraph
 
-**Pattern Selection Guide:**
-
-| Task Type | Pattern | When to Use | Examples |
-|-----------|---------|-------------|----------|
-| **Coordination** | Plan-and-Execute | Managing multiple agents with dependencies | Orchestrator |
-| **Tool Use** | ReAct | Need to iteratively use tools/APIs based on observations | Intent Parser, Knowledge Retriever |
-| **Text Generation** | Chain-of-Thought | Generating text with structured reasoning | Answer Generator |
-| **Analysis** | Chain-of-Thought | Analytical reasoning without tool use | Evaluator |
-| **Decision** | Rule-based | Deterministic decisions with clear rules | Parlant Routing |
-
-**Example: ReAct Within Knowledge Retriever**
-
-```
-KNOWLEDGE RETRIEVER (ReAct Loop):
-
-Iteration 1:
-  THOUGHT: "Start with semantic search"
-  ACTION: Execute semantic search tool
-  OBSERVATION: Found 3 docs, confidence 0.65 (low)
-
-Iteration 2:
-  THOUGHT: "Low confidence, try metadata filtering"
-  ACTION: Execute metadata filter tool on LOB="orders"
-  OBSERVATION: Found 8 docs, confidence 0.82 (better)
-
-Iteration 3:
-  THOUGHT: "Good results, apply reranking"
-  ACTION: Execute rerank tool with Cohere
-  OBSERVATION: Top 5 docs, confidence 0.91 (excellent)
-
-Iteration 4:
-  THOUGHT: "High confidence, return results"
-  ACTION: FINISH
-```
-
-**Example: CoT Within Answer Generator**
-
-```
-ANSWER GENERATOR (Chain-of-Thought):
-
-Prompt with CoT structure:
-"Given the query and retrieved documents, generate an answer following these steps:
-
-Step 1: Identify key information from documents
-- Document 1 mentions customer ABC123 has 5 orders
-- Document 2 shows total revenue of $50,000
-- Document 3 lists top products
-
-Step 2: Determine what information answers the query
-- Query asks for customer orders
-- Documents 1 and 2 are most relevant
-- Document 3 provides supporting context
-
-Step 3: Synthesize answer with proper grounding
-- Customer ABC123 has 5 orders [Source: Doc 1]
-- Total revenue is $50,000 [Source: Doc 2]
-- Top products include... [Source: Doc 3]
-
-Step 4: Add citations and confidence
-- All claims backed by retrieved documents
-- High confidence (0.92) due to direct evidence
-
-Final Answer: [Generated with citations]"
-```
-
-**Example: CoT Within Evaluator**
-
-```
-EVALUATOR (Chain-of-Thought):
-
-Prompt with CoT structure:
-"Evaluate the answer quality following these steps:
-
-Step 1: Check Faithfulness
-- Claim: "Customer has 5 orders"
-- Evidence in docs: Yes, Document 1 states this
-- Faithfulness score: 1.0
-
-Step 2: Check Relevance
-- Query asks about customer orders
-- Answer directly addresses this
-- Relevance score: 0.95
-
-Step 3: Check Correctness
-- All facts match retrieved documents
-- No contradictions found
-- Correctness score: 0.98
-
-Step 4: Check Coverage
-- Answer covers main query aspects
-- Missing: order dates (minor)
-- Coverage score: 0.85
-
-Step 5: Overall Assessment
-- Average score: 0.92
-- Threshold: 0.80
-- Decision: Quality is good, no review needed
-
-Final Evaluation: [Scores and decision]"
-```
-
-**Why This Hybrid Approach?**
-
-- **Plan-and-Execute (Orchestrator)**: Best for high-level coordination with clear dependencies
-- **ReAct (Tool-Using Agents)**: Best for agents that need to use tools iteratively (Intent Parser, Knowledge Retriever)
-- **Chain-of-Thought (Reasoning Agents)**: Best for agents doing analytical/generative reasoning (Answer Generator, Evaluator)
-- **Rule-Based (Deterministic Agents)**: Best for agents with clear decision rules (Parlant Routing)
-- **Clear Separation**: Orchestrator plans the workflow, agents execute using appropriate patterns
-- **Pattern Fit**: Each agent uses the pattern that matches its task type
-- **Observability**: All levels fully logged to Langfuse
-
-### Communication Protocols
-
-**Frontend ↔ Backend (AG-UI Protocol):**
-- Protocol: HTTP/HTTPS (REST API, not WebSockets)
-- Library: `agent-framework-ag-ui` (Python) + `@ag-ui/client` (TypeScript)
-- Format: JSON
-- Streaming: Server-Sent Events (SSE) for agent responses
-- Integration Flow:
-  1. Frontend: CopilotKit → `/api/copilotkit` (Next.js API route)
-  2. Next.js: CopilotRuntime wraps `HttpAgent` from `@ag-ui/client`
-  3. Backend: `add_agent_framework_fastapi_endpoint()` exposes agent at `/` (root path)
-  4. Agent Framework handles SSE streaming automatically
-- Base URL: `http://localhost:8880/` (configurable via HttpAgent)
-- Authentication: Not implemented in starter (can add JWT tokens)
-- State Management: Shared state via `useCoAgent` hook
-- Actions: Frontend actions via `useCopilotAction`, backend tools via `@ai_function`
-
-**Agent ↔ Agent:**
-- Framework: Microsoft Agent Framework (AutoGen Core)
-- Runtime: SingleThreadedAgentRuntime (default) or GrpcWorkerAgentRuntime (distributed)
-- Protocol: Message-based communication via RoutedAgent with message_handler decorators
-- Format: Pydantic models or dataclasses (serializable)
-- Default: SingleThreadedAgentRuntime for high-performance single-process communication
-- Optional: GrpcWorkerAgentRuntime for distributed multi-process communication via gRPC
-- Coordination: Task dependencies via Plan-and-Execute pattern
-- Error Handling: Retry with exponential backoff
-- Configuration: Runtime selection via environment variables (no code changes needed)
-
-**Backend ↔ Database:**
-- Protocol: PostgreSQL wire protocol
-- Driver: asyncpg (async)
-- Connection Pooling: Yes
-- Transaction Support: Yes
-
-**Backend ↔ LLM:**
-- Protocol: HTTPS
-- Format: JSON (OpenAI API format)
-- Streaming: Yes (token-by-token)
-- Rate Limiting: Token bucket algorithm
-
-### Data Flow Pipeline
-
-**Complete Query Processing Flow:**
-
-```
-1. User Query
-   │
-   ├─> Frontend: Capture query + context
-   │
-   ▼
-2. Backend: Validate and route
-   │
-   ├─> Langfuse: Start trace
-   │
-   ▼
-3. Orchestrator: Decompose task
-   │
-   ├─> Create agent tasks
-   ├─> Determine dependencies
-   │
-   ▼
-4. Intent Parser: Multi-step planning
-   │
-   ├─> Step-back reasoning
-   ├─> Entity extraction
-   ├─> Confidence scoring
-   ├─> Fallback detection
-   │
-   ▼
-5. Parlant Routing: Select strategy
-   │
-   ├─> Match guidelines
-   ├─> Log decision
-   │
-   ▼
-6. Knowledge Retriever: Multi-strategy retrieval
-   │
-   ├─> Semantic search (pgvector)
-   ├─> Metadata filtering (PostgreSQL)
-   ├─> Heuristic matching
-   ├─> Merge and deduplicate
-   ├─> Optional reranking
-   │
-   ▼
-7. Answer Generator: Synthesize response
-   │
-   ├─> Select model (complexity-based)
-   ├─> Assemble context with provenance
-   ├─> Generate answer
-   │
-   ▼
-8. Evaluator: Quality assessment
-   │
-   ├─> Compute 7 RAG characteristics
-   ├─> Calculate overall score
-   ├─> Determine if review needed
-   │
-   ├─── Quality OK ─────────────────┐
-   │                                │
-   └─── Quality Low ───┐            │
-                       ▼            │
-9. Human Review: Validate and correct
-   │                                │
-   ├─> Present to reviewer          │
-   ├─> Capture feedback             │
-   ├─> Store in LightningStore      │
-   │                                │
-   └────────────────────────────────┤
-                                    ▼
-10. Return Answer
-    │
-    ├─> Stream to frontend
-    ├─> Update UI state
-    ├─> Log to Langfuse
-    │
-    ▼
-11. Continuous Improvement
-    │
-    ├─> Agent Lightning: Analyze feedback
-    ├─> Update prompts and guidelines
-    └─> Deploy improvements
-```
-
-## RAG Pipeline Design
-
-This section details how the 6 core RAG stages map to specific agents and functions, ensuring complete coverage of all RAG capabilities.
-
-### RAG Stage 1: Query Construction
-
-**Objective**: Convert user input into structured queries (SQL, semantic, graph-based)
-
-**Agent**: Intent Parser Agent
-
-**Functions**:
-
-1. **Natural Language Understanding**
-   ```python
-   @ai_function(name="parse_natural_language")
-   async def parse_natural_language(query: str) -> IntentResult:
-       """
-       Extract intent, entities, and query type from natural language.
-       Supports: SQL generation, data stories, general QA, visualizations
-       """
-   ```
-
-2. **Text-to-SQL Generation** (via SQLCoder integration)
-   ```python
-   @ai_function(name="generate_sql_query")
-   async def generate_sql_query(
-       query: str,
-       schema_context: Dict[str, Any]
-   ) -> SQLQuery:
-       """
-       Generate SQL from natural language using SQLCoder.
-       Schema awareness via ClickHouse MCP prevents hallucinations.
-       """
-   ```
-
-3. **Self-Query Construction**
-   ```python
-   @ai_function(name="construct_self_query")
-   async def construct_self_query(
-       query: str,
-       metadata_schema: Dict[str, Any]
-   ) -> StructuredQuery:
-       """
-       Build structured query with filters and constraints.
-       Extracts: semantic query + metadata filters + temporal constraints
-       """
-   ```
-
-4. **Schema Awareness**
-   ```python
-   @ai_function(name="get_schema_context")
-   async def get_schema_context(database: str) -> SchemaContext:
-       """
-       Retrieve schema from ClickHouse MCP with caching.
-       Returns: tables, columns, types, relationships, constraints
-       """
-   ```
-
-**Evaluation**: Spider, UNITE, BIRD datasets; Execution Accuracy; UNITE toolkit
-
-**Langfuse Integration**:
-```python
-with langfuse.trace("query_construction") as trace:
-    trace.span("nl_parsing", input=query, output=intent_result)
-    trace.span("sql_generation", input=intent, output=sql_query)
-    trace.score("sql_accuracy", accuracy_score)
+    %% Fan-In & Synthesis
+    ExpertSQL & ExpertVec & ExpertGraph -->|Raw Results| Reranker
+    Reranker --> Generator
+    Generator --> Evaluator
+    Evaluator -->|High Quality| User
+    Evaluator -->|Medium Quality| HumanReview
+    Evaluator -->|Low Quality| Planner
+    HumanReview -.->|Approved| User
+    HumanReview -.->|Rejected with Feedback| Parser
 ```
 
 ---
 
-### RAG Stage 2: Query Translation
+## 3. Agent Specifications
 
-**Objective**: Rewrite, decompose, fuse, or augment queries for better retrieval
+### 3.1. Intent Parser Agent (The Triage)
 
-**Agent**: Intent Parser Agent (Multi-Step Planning)
+**Pattern:** `ReAct` (internal) → `Handoff` (external)
 
-**Functions**:
+**Responsibility:** Semantic triage. Converts natural language into structured, grounded Intent Draft.
 
-1. **RAG-Fusion** (Multi-Query Generation)
-   ```python
-   @ai_function(name="generate_query_variants")
-   async def generate_query_variants(query: str) -> List[str]:
-       """
-       Generate multiple query variants for parallel retrieval.
-       Techniques: Paraphrasing, perspective shifting, specificity variation
-       """
-   ```
-
-2. **HyDE** (Hypothetical Document Embeddings)
-   ```python
-   @ai_function(name="generate_hypothetical_document")
-   async def generate_hypothetical_document(query: str) -> str:
-       """
-       Generate hypothetical answer document for embedding-based retrieval.
-       Improves semantic matching by bridging query-document gap.
-       """
-   ```
-
-3. **Query Decomposition**
-   ```python
-   @ai_function(name="decompose_complex_query")
-   async def decompose_complex_query(query: str) -> List[SubIntent]:
-       """
-       Break complex queries into sequential sub-queries.
-       Returns: ordered sub-intents with dependencies
-       """
-   ```
-
-4. **Query Augmentation**
-   ```python
-   @ai_function(name="augment_query_with_context")
-   async def augment_query_with_context(
-       query: str,
-       context: ConversationContext
-   ) -> str:
-       """
-       Enrich query with conversation history and entity resolution.
-       Resolves: anaphora, temporal references, implicit entities
-       """
-   ```
-
-**Evaluation**: BEIR benchmark; Recall@k, MRR, nDCG; DeepEval reranking
-
-**Langfuse Integration**:
-```python
-with langfuse.trace("query_translation") as trace:
-    trace.span("rag_fusion", output=query_variants)
-    trace.span("hyde", output=hypothetical_doc)
-    trace.span("decomposition", output=sub_intents)
-```
-
----
-
-### RAG Stage 3: Routing
-
-**Objective**: Decide which retriever/tool/agent to use based on query type/context
-
-**Agent**: Parlant Routing Layer
-
-**Functions**:
-
-1. **Guideline-Based Routing**
-   ```python
-   @ai_function(name="route_with_guidelines")
-   def route_with_guidelines(
-       query: str,
-       intent: IntentResult
-   ) -> RoutingDecision:
-       """
-       Apply Parlant guidelines in priority order.
-       Returns: retriever selection + reasoning + confidence
-       """
-   ```
-
-2. **Hybrid Routing** (Static + Dynamic)
-   ```python
-   @ai_function(name="hybrid_route")
-   async def hybrid_route(
-       query: str,
-       intent: IntentResult
-   ) -> RoutingDecision:
-       """
-       Combine static rules (SQL, GraphQL) with LLM-assisted routing.
-       Static: Predictable patterns (high confidence)
-       Dynamic: Ambiguous queries (LLM reasoning)
-       """
-   ```
-
-3. **Multi-LOB Routing**
-   ```python
-   @ai_function(name="route_to_lobs")
-   def route_to_lobs(intent: IntentResult) -> List[LOB]:
-       """
-       Determine which Lines of Business to query.
-       Supports: Inventory, Orders, Support, Finance
-       """
-   ```
-
-4. **Fallback Routing**
-   ```python
-   @ai_function(name="apply_fallback_strategy")
-   def apply_fallback_strategy(
-       query: str,
-       failed_routes: List[str]
-   ) -> RoutingDecision:
-       """
-       Handle routing failures with fallback strategies.
-       Strategies: Alternative retrievers, human escalation, clarification
-       """
-   ```
-
-**Evaluation**: Custom routing accuracy tests; Rule compliance %, Misrouting rate; Parlant logs + Langfuse traces
-
-**Langfuse Integration**:
-```python
-with langfuse.trace("routing") as trace:
-    trace.span("guideline_matching", output=matched_guideline)
-    trace.span("lob_selection", output=selected_lobs)
-    trace.score("routing_confidence", confidence)
-```
-
----
-
-### RAG Stage 4: Retrieval
-
-**Objective**: Fetch relevant documents from DBs or APIs
-
-**Agent**: Knowledge Retriever Agent
-
-**Functions**:
-
-1. **Semantic Search** (Embedding-Based)
-   ```python
-   @ai_function(name="semantic_search")
-   async def semantic_search(
-       query: str,
-       top_k: int = 10
-   ) -> List[Document]:
-       """
-       Vector similarity search using pgvector.
-       Embedding: text-embedding-ada-002
-       Distance: Cosine similarity
-       """
-   ```
-
-2. **Metadata Filtering** (Structured Constraints)
-   ```python
-   @ai_function(name="metadata_filter")
-   async def metadata_filter(
-       constraints: Dict[str, Any],
-       lobs: List[LOB]
-   ) -> List[Document]:
-       """
-       Structured filtering via PostgreSQL queries.
-       Filters: LOB, timestamp, source, confidence, custom metadata
-       """
-   ```
-
-3. **Guided Grep** (Heuristic Pattern Matching)
-   ```python
-   @ai_function(name="guided_grep")
-   async def guided_grep(
-       pattern: str,
-       context: str
-   ) -> List[Document]:
-       """
-       Pattern-based retrieval for exact matches.
-       Techniques: Regex, fuzzy matching, keyword extraction
-       """
-   ```
-
-4. **Multi-Strategy Retrieval**
-   ```python
-   @ai_function(name="multi_strategy_retrieve")
-   async def multi_strategy_retrieve(
-       query: str,
-       strategies: List[RetrievalStrategy]
-   ) -> RetrievalResult:
-       """
-       Execute multiple retrieval strategies in parallel.
-       Strategies: Semantic, Metadata, Heuristic
-       Returns: Merged and deduplicated results
-       """
-   ```
-
-5. **Reranking**
-   ```python
-   @ai_function(name="rerank_documents")
-   async def rerank_documents(
-       query: str,
-       documents: List[Document],
-       method: Literal["cohere", "llm_judge"]
-   ) -> List[Document]:
-       """
-       Rerank candidates for improved relevance.
-       Methods: Cohere Rerank API, LLM-as-a-Judge
-       """
-   ```
-
-6. **Active Retrieval** (CMG - Contextual Memory Graph)
-   ```python
-   @ai_function(name="contextual_memory_graph_retrieve")
-   async def contextual_memory_graph_retrieve(
-       query: str,
-       conversation_id: UUID
-   ) -> List[Document]:
-       """
-       Retrieve from conversation-specific memory graph.
-       Maintains: Entity relationships, temporal context, user preferences
-       """
-   ```
-
-**Evaluation**: BEIR, MS MARCO, TREC datasets; Precision@k, Recall@k, nDCG; DeepEval + Langfuse retrieval traces
-
-**Langfuse Integration**:
-```python
-with langfuse.trace("retrieval") as trace:
-    trace.span("semantic_search", output=semantic_docs)
-    trace.span("metadata_filter", output=filtered_docs)
-    trace.span("reranking", output=reranked_docs)
-    trace.score("retrieval_precision", precision_at_k)
-    trace.score("retrieval_recall", recall_at_k)
-```
-
----
-
-### RAG Stage 5: Indexing
-
-**Objective**: Chunking, embedding, organizing documents for optimal retrieval
-
-**Agent**: Document Ingestion Agent (uses LlamaIndex)
-
-**Functions**:
-
-1. **Semantic Chunking**
-   ```python
-   @ai_function(name="semantic_chunk")
-   async def semantic_chunk(
-       document: str,
-       chunk_size: int = 512
-   ) -> List[str]:
-       """
-       LlamaIndex SemanticSplitter for NLP-driven chunking.
-       Preserves: Sentence boundaries, semantic coherence
-       """
-   ```
-
-2. **Recursive Chunking**
-   ```python
-   @ai_function(name="recursive_chunk")
-   async def recursive_chunk(
-       document: str,
-       separators: List[str] = ["\n\n", "\n", ". ", " "]
-   ) -> List[str]:
-       """
-       LlamaIndex RecursiveCharacterTextSplitter.
-       Hierarchical splitting by semantic units.
-       """
-   ```
-
-3. **Hierarchical Indexing**
-   ```python
-   @ai_function(name="hierarchical_index")
-   async def hierarchical_index(
-       document: str
-   ) -> HierarchicalIndex:
-       """
-       LlamaIndex parent/child document structures.
-       Enables: Multi-level retrieval, context preservation
-       """
-   ```
-
-4. **RAPTOR Indexing** (Tree-Based)
-   ```python
-   @ai_function(name="raptor_index")
-   async def raptor_index(
-       documents: List[str]
-   ) -> RAPTORTree:
-       """
-       LlamaIndex RAPTOR for tree-based multi-level retrieval.
-       Builds: Hierarchical summaries, clustered embeddings
-       """
-   ```
-
-5. **Embedding Generation**
-   ```python
-   @ai_function(name="generate_embeddings")
-   async def generate_embeddings(
-       chunks: List[str],
-       model: str = "text-embedding-ada-002"
-   ) -> List[List[float]]:
-       """
-       Generate embeddings for chunks.
-       Models: Azure OpenAI, HuggingFace, Cohere
-       """
-   ```
-
-6. **Metadata Extraction**
-   ```python
-   @ai_function(name="extract_metadata")
-   async def extract_metadata(
-       document: str,
-       chunk: str
-   ) -> Dict[str, Any]:
-       """
-       Extract metadata for filtering and provenance.
-       Extracts: Source, timestamp, LOB, entities, keywords
-       """
-   ```
-
-7. **Storage and Indexing**
-   ```python
-   @ai_function(name="store_with_index")
-   async def store_with_index(
-       chunks: List[str],
-       embeddings: List[List[float]],
-       metadata: List[Dict]
-   ) -> None:
-       """
-       Store in pgvector with IVFFlat index.
-       Index: Cosine similarity, 100 lists
-       """
-   ```
-
-**Evaluation**: BEIR benchmark; Embedding similarity scores, Recall@k, nDCG, latency; LlamaIndex eval suite + Langfuse traces
-
-**Langfuse Integration**:
-```python
-with langfuse.trace("indexing") as trace:
-    trace.span("chunking", output=chunks)
-    trace.span("embedding", output=embeddings)
-    trace.span("storage", output=storage_result)
-    trace.score("indexing_latency_ms", latency)
-```
-
----
-
-### RAG Stage 6: Generation
-
-**Objective**: Generate grounded responses from retrieved docs
-
-**Agent**: Answer Generator Agent
-
-**Functions**:
-
-1. **Context Assembly**
-   ```python
-   @ai_function(name="assemble_context")
-   async def assemble_context(
-       documents: List[Document],
-       max_tokens: int = 4000
-   ) -> Context:
-       """
-       Assemble context with provenance metadata.
-       Includes: Source attribution, timestamps, confidence scores
-       """
-   ```
-
-2. **Prompt Optimization** (Agent Lightning)
-   ```python
-   @ai_function(name="get_optimized_prompt")
-   async def get_optimized_prompt(
-       task_type: str,
-       context: Context
-   ) -> PromptTemplate:
-       """
-       Retrieve optimized prompt from Agent Lightning.
-       Optimization: RL-based, supervised fine-tuning, A/B tested
-       """
-   ```
-
-3. **Model Selection**
-   ```python
-   @ai_function(name="select_generation_model")
-   def select_generation_model(
-       complexity: TaskComplexity
-   ) -> str:
-       """
-       Choose LLM based on task complexity.
-       Simple: GPT-4o-mini, Moderate: GPT-4, Complex: o1-preview
-       """
-   ```
-
-4. **Answer Generation**
-   ```python
-   @ai_function(name="generate_answer")
-   async def generate_answer(
-       query: str,
-       context: Context,
-       prompt_template: PromptTemplate,
-       model: str
-   ) -> Answer:
-       """
-       Generate grounded answer with citations.
-       Streaming: Token-by-token for real-time display
-       """
-   ```
-
-5. **Guardrails Enforcement**
-   ```python
-   @ai_function(name="apply_guardrails")
-   async def apply_guardrails(
-       answer: Answer
-   ) -> Answer:
-       """
-       Apply Parlant guardrails and Azure Content Safety.
-       Checks: PII, toxicity, factual grounding, policy compliance
-       """
-   ```
-
-6. **Citation Generation**
-   ```python
-   @ai_function(name="generate_citations")
-   def generate_citations(
-       answer: Answer,
-       context: Context
-   ) -> List[Citation]:
-       """
-       Generate inline citations for answer.
-       Format: [Source: document_id, confidence: 0.92]
-       """
-   ```
-
-**Evaluation**: TruthfulQA, MT-Bench, Eval Harness; Metrics: Faithfulness, factual accuracy, hallucination rate; Agent Lightning RL feedback loops
-
-**Langfuse Integration**:
-```python
-with langfuse.trace("generation") as trace:
-    trace.span("context_assembly", output=context)
-    trace.span("prompt_optimization", output=prompt)
-    trace.span("llm_generation", output=answer)
-    trace.span("guardrails", output=guardrails_result)
-    trace.score("faithfulness", faithfulness_score)
-    trace.score("hallucination_rate", hallucination_rate)
-    trace.metadata({"tokens_used": tokens, "cost_usd": cost})
-```
-
----
-
-### RAG Pipeline Integration
-
-**Complete Pipeline Execution:**
-
-```python
-async def execute_rag_pipeline(query: str, user_id: str) -> Answer:
-    """Execute complete RAG pipeline with all 6 stages"""
-    
-    # Stage 1: Query Construction
-    intent = await parse_natural_language(query)
-    if intent.query_type == QueryType.SQL_GENERATION:
-        sql_query = await generate_sql_query(query, schema_context)
-    
-    # Stage 2: Query Translation
-    query_variants = await generate_query_variants(query)
-    sub_intents = await decompose_complex_query(query)
-    
-    # Stage 3: Routing
-    routing_decision = await route_with_guidelines(query, intent)
-    lobs = await route_to_lobs(intent)
-    
-    # Stage 4: Retrieval
-    retrieval_result = await multi_strategy_retrieve(
-        query,
-        strategies=[
-            RetrievalStrategy.SEMANTIC,
-            RetrievalStrategy.METADATA,
-            RetrievalStrategy.HEURISTIC
-        ]
-    )
-    documents = await rerank_documents(query, retrieval_result.documents)
-    
-    # Stage 5: Indexing (background process for new documents)
-    # Runs asynchronously, not blocking query pipeline
-    
-    # Stage 6: Generation
-    context = await assemble_context(documents)
-    prompt = await get_optimized_prompt("answer_generation", context)
-    model = select_generation_model(intent.abstract_intent.complexity)
-    answer = await generate_answer(query, context, prompt, model)
-    answer = await apply_guardrails(answer)
-    
-    return answer
-```
-
-### RAG Quality Characteristics Coverage
-
-**Mapping to Agents:**
-
-1. **Coverage**: Knowledge Retriever (multi-strategy retrieval) + Evaluator (coverage scoring)
-2. **Consistency**: Knowledge Retriever (deduplication) + Evaluator (consistency scoring)
-3. **Freshness**: Document Ingestion (timestamp tracking) + Evaluator (freshness scoring)
-4. **Traceability**: Answer Generator (citation generation) + Evaluator (traceability scoring)
-5. **Faithfulness**: Answer Generator (grounding) + Evaluator (RAGAS faithfulness)
-6. **Relevance**: Knowledge Retriever (reranking) + Evaluator (RAGAS relevance)
-7. **Correctness**: Answer Generator (guardrails) + Evaluator (RAGAS correctness)
-
-## Components and Interfaces
-
-### 1. Orchestrator Agent (Plan-and-Execute with MAF Swarm)
-
-**Responsibility**: High-level coordination using Plan-and-Execute pattern. Creates execution plan based on parsed intent and coordinates agents using **MAF Swarm** for execution.
-
-**Pattern**: Plan-and-Execute at orchestration level + MAF Swarm for agent handoffs
-
-**Architecture:**
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    PLAN PHASE (Orchestrator)                 │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │ 1. Intent Parser → IntentResult (multi-step planning)│  │
-│  │ 2. Create execution plan based on intent complexity  │  │
-│  │ 3. Build handoff sequence for MAF Swarm             │  │
-│  │ • Determine which agents needed                      │  │
-│  │ • Identify dependencies between tasks                │  │
-│  │ • Generate handoff sequence (e.g., retriever →       │  │
-│  │   generator → evaluator)                            │  │
-│  └──────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                  EXECUTE PHASE (MAF Swarm)                   │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │ Intent Parser → HandoffMessage →                    │  │
-│  │ (ReAct pattern internally for parsing)              │  │
-│  │                                                      │  │
-│  │    ↓                                                 │  │
-│  │                                                      │  │
-│  │ Knowledge Retriever → HandoffMessage →            │  │
-│  │ (ReAct pattern internally for retrieval)            │  │
-│  │                                                      │  │
-│  │    ↓                                                 │  │
-│  │                                                      │  │
-│  │ Answer Generator → HandoffMessage →               │  │
-│  │ (Chain-of-Thought pattern for synthesis)           │  │
-│  │                                                      │  │
-│  │    ↓                                                 │  │
-│  │                                                      │  │
-│  │ Evaluator → Final answer (no handoff)              │  │
-│  │ (Chain-of-Thought pattern for quality check)       │  │
-│  └──────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                  AGGREGATE PHASE (Orchestrator)              │
-│  Collect results → Validate → Return answer with metadata  │
-└─────────────────────────────────────────────────────────────┘
-```
-
-**Interface**:
-```python
-from typing import List, Dict, Any, Optional
-from dataclasses import dataclass
-from enum import Enum
-from autogen_agentchat.teams import Swarm
-from autogen_agentchat.agents import AssistantAgent
-from autogen_agentchat.messages import HandoffMessage
-from autogen_core import AgentRuntime, SingleThreadedAgentRuntime
-
-class AgentTask(Enum):
-    """Agent tasks in execution plan"""
-    PARSE_INTENT = "parse_intent"  # Intent Parser (ReAct)
-    ROUTE_QUERY = "route_query"    # Parlant Router (Rule-based)
-    RETRIEVE_KNOWLEDGE = "retrieve_knowledge"  # Knowledge Retriever (ReAct)
-    GENERATE_ANSWER = "generate_answer"        # Answer Generator (CoT)
-    EVALUATE_QUALITY = "evaluate_quality"      # Evaluator (CoT)
-
-@dataclass
-class ExecutionPlan:
-    """Planned sequence of agent tasks with dependencies"""
-    tasks: List[AgentTask]
-    dependencies: Dict[AgentTask, List[AgentTask]]  # Task → prerequisite tasks
-    parallel_groups: List[List[AgentTask]]  # Tasks that can run in parallel
-    estimated_duration_ms: int
-    handoff_sequence: List[str]  # Agent names for MAF Swarm execution
-    query_complexity: str  # "simple", "moderate", "complex"
-    reasoning: str  # Why this plan was chosen
-
-@dataclass
-class ExecutionContext:
-    """Shared context across agent executions"""
-    query: str
-    user_id: str
-    conversation_context: Optional[ConversationContext] = None
-    plan: Optional[ExecutionPlan] = None
-
-    # Results from each agent (collected from Swarm execution)
-    intent: Optional[IntentResult] = None
-    routing_decision: Optional[RoutingDecision] = None
-    retrieved_documents: Optional[List[Document]] = None
-    generated_answer: Optional[Answer] = None
-    evaluation: Optional[EvaluationResult] = None
-
-class OrchestratorAgent(AssistantAgent):
-    """
-    Plan-and-Execute orchestrator for high-level agent coordination.
-    Uses MAF Swarm for execution to leverage built-in handoff mechanism.
-    Intent Parser is the entry point, which hands off to Orchestrator.
-    """
-
-    def __init__(
-        self,
-        runtime: AgentRuntime,
-        swarm: Swarm,
-        name: str = "orchestrator"
-    ) -> None:
-        super().__init__(name=name)
-        self.runtime = runtime
-        self.swarm = swarm
-        self.agents: Dict[str, AssistantAgent] = {
-            agent.name: agent for agent in swarm._participants
-        }
-
-    async def process_query(self, query: str, user_id: str) -> Answer:
-        """
-        Main Plan-and-Execute workflow:
-        1. PLAN: Intent Parser → IntentResult → Orchestrator creates plan
-        2. EXECUTE: Use MAF Swarm for agent handoffs (saves ~80% orchestration code)
-        3. AGGREGATE: Collect and validate results from Swarm execution
-        """
-        # Step 1: PLAN - Parse intent first (may have been done by Intent Parser)
-        context = ExecutionContext(query=query, user_id=user_id)
-
-        # If intent not already parsed, parse it
-        if not context.intent:
-            context.intent = await self.parse_intent(query, context)
-
-        # Create execution plan based on parsed intent
-        execution_plan = await self.create_plan(context.intent, context)
-        context.plan = execution_plan
-
-        # Log plan to Langfuse for observability
-        await self.log_plan(execution_plan, context)
-
-        # Step 2: EXECUTE using MAF Swarm
-        # Each agent returns HandoffMessage, Swarm runtime handles the routing
-        # Intent Parser already ran, so start from Knowledge Retriever
-        final_result = await self.execute_with_swarm(execution_plan, context)
-
-        # Step 3: AGGREGATE & RETURN
-        return await self.aggregate_results(final_result, context)
-
-    async def parse_intent(self, query: str, context: ExecutionContext) -> IntentResult:
-        """
-        Parse intent if not already done by Intent Parser agent.
-        This is the entry point from Intent Parser handoff.
-        """
-        intent_parser = self.agents["intent_parser"]
-
-        # Use MAF message passing to parse intent
-        response = await self.runtime.send_message(
-            IntentParseRequest(
-                query=query,
-                user_id=context.user_id,
-                conversation_context=context.conversation_context
-            ),
-            AgentId("intent_parser", "default")
-        )
-
-        return response
-
-    async def create_plan(
-        self,
-        intent_result: IntentResult,
-        context: ExecutionContext
-    ) -> ExecutionPlan:
-        """
-        PLAN phase: Create execution plan based on parsed intent
-
-        For complex queries with multi-step planning, creates detailed plan.
-        For simple queries, uses standard RAG pipeline sequence.
-        """
-        # Create execution plan based on intent complexity
-        if intent_result.abstract_intent.requires_multi_step:
-            # Complex query: Use multi-step plan from sub-intents
-            execution_plan = await self.create_multi_step_plan(
-                intent_result, context
-            )
-        else:
-            # Simple query: Standard RAG pipeline plan
-            execution_plan = await self.create_standard_plan(
-                intent_result, context
-            )
-
-        return execution_plan
-
-    async def create_standard_plan(
-        self,
-        intent_result: IntentResult,
-        context: ExecutionContext
-    ) -> ExecutionPlan:
-        """Create standard RAG pipeline plan for simple queries"""
-        tasks = [
-            AgentTask.PARSE_INTENT,  # Already done, but included for completeness
-            AgentTask.ROUTE_QUERY,
-            AgentTask.RETRIEVE_KNOWLEDGE,
-            AgentTask.GENERATE_ANSWER,
-            AgentTask.EVALUATE_QUALITY
-        ]
-
-        # Define dependencies (sequential by default)
-        dependencies = {
-            AgentTask.PARSE_INTENT: [],
-            AgentTask.ROUTE_QUERY: [AgentTask.PARSE_INTENT],
-            AgentTask.RETRIEVE_KNOWLEDGE: [AgentTask.ROUTE_QUERY],
-            AgentTask.GENERATE_ANSWER: [AgentTask.RETRIEVE_KNOWLEDGE],
-            AgentTask.EVALUATE_QUALITY: [AgentTask.GENERATE_ANSWER]
-        }
-
-        # No parallel groups in standard pipeline (sequential)
-        parallel_groups = []
-
-        # Handoff sequence for MAF Swarm
-        # Intent Parser already ran, so start from Knowledge Retriever
-        handoff_sequence = [
-            "knowledge_retriever",
-            "answer_generator",
-            "evaluator"
-        ]
-
-        # Add reasoning for observability
-        reasoning = f"Standard RAG pipeline for {intent_result.query_type.value} query type"
-
-        return ExecutionPlan(
-            tasks=tasks,
-            dependencies=dependencies,
-            parallel_groups=parallel_groups,
-            estimated_duration_ms=2000,
-            handoff_sequence=handoff_sequence,
-            query_complexity=intent_result.abstract_intent.complexity,
-            reasoning=reasoning
-        )
-
-    async def create_multi_step_plan(
-        self,
-        intent_result: IntentResult,
-        context: ExecutionContext
-    ) -> ExecutionPlan:
-        """Create multi-step plan for complex queries with sub-intents"""
-        tasks = []
-        dependencies = {}
-        handoff_sequence = []
-
-        # Flatten sub-intents into execution plan
-        for sub_intent in intent_result.sub_intents:
-            task = AgentTask(sub_intent.intent)
-            tasks.append(task)
-
-            # Map dependencies
-            dependencies[task] = [
-                AgentTask(intent_result.sub_intents[dep-1].intent)
-                for dep in sub_intent.dependencies
-            ]
-
-            # Build handoff sequence (flattened for now, could optimize)
-            handoff_sequence.append(f"{sub_intent.intent}_agent")
-
-        # Add final evaluation
-        tasks.append(AgentTask.EVALUATE_QUALITY)
-        dependencies[AgentTask.EVALUATE_QUALITY] = tasks[:-1]
-        handoff_sequence.append("evaluator")
-
-        # Add reasoning for observability
-        reasoning = f"Multi-step plan for complex query with {len(tasks)} sub-tasks"
-
-        return ExecutionPlan(
-            tasks=tasks,
-            dependencies=dependencies,
-            parallel_groups=[],  # Could detect parallelizable tasks
-            estimated_duration_ms=5000,  # Longer for multi-step
-            handoff_sequence=handoff_sequence,
-            query_complexity="complex",
-            reasoning=reasoning
-        )
-
-    async def execute_with_swarm(
-        self,
-        execution_plan: ExecutionPlan,
-        context: ExecutionContext
-    ) -> Dict[str, Any]:
-        """
-        EXECUTE phase: Use MAF Swarm for agent coordination
-
-        Each agent returns HandoffMessage, Swarm runtime handles routing.
-        This eliminates ~80% of custom orchestration code.
-
-        Intent Parser is not in handoff_sequence since it already ran.
-        """
-        # Prepare initial message with all context
-        # Intent Parser already ran in planning phase, so start from first agent
-        first_agent = execution_plan.handoff_sequence[0]
-
-        # Create initial HandoffMessage
-        initial_message = HandoffMessage(
-            source="orchestrator",
-            target=first_agent,
-            content={
-                "query": context.query,
-                "user_id": context.user_id,
-                "intent": context.intent,
-                "routing_decision": context.routing_decision,
-                "conversation_context": context.conversation_context
-            }
-        )
-
-        # Execute Swarm - agents hand off to each other automatically
-        # Each agent processes and returns HandoffMessage to next agent
-        final_result = await self.swarm.run(initial_message)
-
-        # Extract results from Swarm execution context
-        return self._extract_results_from_swarm(final_result)
-
-    def _extract_results_from_swarm(self, swarm_result: Any) -> Dict[str, Any]:
-        """Extract agent results from Swarm execution"""
-        # MAF Swarm provides accumulated context with all agent outputs
-        conversation = swarm_result
-
-        # Extract from conversation's context or message history
-        # Implementation depends on Swarm's exact result format
-        context = {}
-        for message in conversation.messages:
-            if hasattr(message, 'content') and isinstance(message.content, dict):
-                context.update(message.content)
-
-        return {
-            "retrieved_documents": context.get("retrieved_documents", []),
-            "generated_answer": context.get("generated_answer", None),
-            "evaluation": context.get("evaluation", None)
-        }
-
-    async def aggregate_results(
-        self,
-        final_result: Dict[str, Any],
-        context: ExecutionContext
-    ) -> Answer:
-        """
-        AGGREGATE phase: Collect and validate results from Swarm execution
-
-        Returns final answer with all metadata.
-        """
-        generated_answer = final_result.get("generated_answer")
-        evaluation = final_result.get("evaluation")
-
-        if not generated_answer:
-            return self.create_fallback_answer(context)
-
-        # Add evaluation metadata
-        if evaluation:
-            generated_answer.provenance["evaluation"] = {
-                "overall_score": evaluation.overall_score,
-                "faithfulness": evaluation.faithfulness,
-                "relevance": evaluation.relevance,
-                "coverage": evaluation.coverage,
-                "needs_review": evaluation.needs_review
-            }
-
-        return generated_answer
-
-    async def log_plan(self, plan: ExecutionPlan, context: ExecutionContext) -> None:
-        """Log execution plan to Langfuse"""
-        with langfuse.trace("query_planning") as trace:
-            trace.span(
-                "execution_plan_generation",
-                input={"query": context.query, "intent": context.intent.intent},
-                output={
-                    "tasks": [task.value for task in plan.tasks],
-                    "handoff_sequence": plan.handoff_sequence,
-                    "estimated_duration_ms": plan.estimated_duration_ms,
-                    "complexity": plan.query_complexity,
-                    "reasoning": plan.reasoning
-                }
-            )
-
-    def create_fallback_answer(self, context: ExecutionContext) -> Answer:
-        """Create fallback answer when execution fails"""
-        return Answer(
-            text="I apologize, but I couldn't complete processing your query. Please try rephrasing or contact support.",
-            sources=[],
-            confidence=0.0,
-            model_used="fallback",
-            generation_time_ms=0,
-            provenance={
-                "reason": "execution_failed",
-                "plan": context.plan.__dict__ if context.plan else None
-            }
-        )
-```
-
-**Benefits of MAF Swarm Orchestration:**
-
-1. **Massive Code Reduction**: ~80% less orchestration code (MAF handles handoffs)
-2. **Production-Tested**: Microsoft built and tested Swarm transitions
-3. **Built-in Observability**: MAF automatically traces agent handoffs
-4. **Error Handling**: Automatic retry and failure recovery
-5. **Type Safety**: Pydantic-based message passing ensures correctness
-6. **Flexible Deployment**: Works with both SingleThreadedAgentRuntime and GrpcWorkerAgentRuntime
-
-**How Swarm Execution Works:**
-
-```python
-# Intent Parser Agent (entry point) hands off to Orchestrator
-class IntentParserAgent(AssistantAgent):
-    async def on_messages(self, messages, cancellation_token):
-        query = messages[-1].content
-        intent = await self.parse_intent(query)
-
-        # Hand off to Orchestrator for planning & execution
-        return HandoffMessage(
-            source=self.name,
-            target="orchestrator",
-            content={"intent": intent, "query": query}
-        )
-
-# Orchestrator receives handoff and plans execution
-class OrchestratorAgent(AssistantAgent):
-    async def on_messages(self, messages, cancellation_token):
-        # Extract intent from Intent Parser
-        intent = messages[-1].content["intent"]
-        query = messages[-1].content["query"]
-
-        # Create execution plan
-        execution_plan = await self.create_plan(intent)
-
-        # Execute using Swarm
-        result = await self.execute_with_swarm(execution_plan)
-
-        # Return final answer to user
-        return result
-
-# Knowledge Retriever Agent used by Swarm
-class KnowledgeRetrieverAgent(AssistantAgent):
-    async def on_messages(self, messages, cancellation_token):
-        # Extract context from previous agent (Orchestrator)
-        intent = messages[-1].content["intent"]
-        query = messages[-1].content["query"]
-
-        # Use ReAct internally for multi-strategy retrieval
-        documents = await self.retrieve_with_react(query, intent)
-
-        # Hand off to Answer Generator
-        return HandoffMessage(
-            source=self.name,
-            target="answer_generator",
-            content={
-                "intent": intent,
-                "query": query,
-                "documents": documents
-            }
-        )
-
-# Swarm automatically routes messages between agents
-# Each agent uses its internal pattern (ReAct or CoT) for its specific task
-```
-
-**Workflow:**
-1. **Intent Parser** parses query → **hands off to Orchestrator**
-2. **Orchestrator** creates execution plan → **uses Swarm to execute**
-3. **Swarm** orchestrates agents: Knowledge Retriever → Generator → Evaluator
-4. **Each agent** uses internal pattern (ReAct or CoT) for its job
-5. **Orchestrator** aggregates results and returns final answer
-
-**Dependencies**: Intent Parser Agent (ReAct), Parlant Router (Rule-based), Knowledge Retriever Agent (ReAct), Answer Generator Agent (Chain-of-Thought), Evaluator Agent (Chain-of-Thought)
-
-### 2. Intent Parser Agent
-
-**Responsibility**: Extract intent, entities, and confidence from natural language queries using advanced reasoning techniques.
-
-**Advanced Techniques**:
-
-1. **Multi-Step Planning**: Decompose complex queries into sequential sub-intents
-2. **Variable Assignment**: Track entities across multi-turn conversations
-3. **Step-Back Reasoning**: Abstract query to higher-level concepts before parsing
-4. **Confidence Scoring**: Multi-dimensional confidence with uncertainty quantification
-5. **Optional Entities**: Distinguish required vs. optional entities
-6. **Fallback & Recovery**: Graceful degradation with clarification strategies
-
-**Interface**:
+**Interface:**
 ```python
 class IntentParserAgent:
-    async def parse_intent(self, query: str, context: ConversationContext) -> IntentResult:
-        """
-        Extract intent and entities with confidence scores using multi-step reasoning.
-        
-        Process:
-        1. Step-back reasoning: Abstract query to high-level intent
-        2. Multi-step planning: Decompose into sub-intents if complex
-        3. Entity extraction: Identify required and optional entities
-        4. Variable assignment: Resolve entities from conversation context
-        5. Confidence scoring: Compute multi-dimensional confidence
-        6. Fallback detection: Identify if clarification needed
-        """
-        
-    async def step_back_reasoning(self, query: str) -> AbstractIntent:
-        """
-        Abstract query to higher-level concepts before detailed parsing.
-        
-        Example:
-        Query: "Show me orders from customer ABC123 in the last week"
-        Abstract: "Temporal data retrieval with entity filter"
-        
-        This helps identify the query pattern before getting into specifics.
-        """
-        
-    async def multi_step_planning(self, query: str, abstract_intent: AbstractIntent) -> List[SubIntent]:
-        """
-        Decompose complex queries into sequential sub-intents.
-        
-        Example:
-        Query: "Compare revenue between Q1 and Q2, then show top products"
-        Sub-intents:
-        1. Retrieve Q1 revenue data
-        2. Retrieve Q2 revenue data
-        3. Compute comparison metrics
-        4. Retrieve product data
-        5. Rank products by revenue
-        
-        Each sub-intent has dependencies and execution order.
-        """
-        
-    async def extract_entities(self, query: str, sub_intents: List[SubIntent]) -> EntityExtractionResult:
-        """
-        Extract entities with required/optional classification.
-        
-        Returns:
-        - required_entities: Must be present for query to succeed
-        - optional_entities: Enhance query but not mandatory
-        - missing_required: Required entities not found (triggers clarification)
-        """
-        
-    async def assign_variables(self, entities: Dict[str, Any], context: ConversationContext) -> Dict[str, Any]:
-        """
-        Resolve entity values from conversation context.
-        
-        Example:
-        User: "Show me customer ABC123"
-        System: [displays customer info]
-        User: "What are their recent orders?"
-        
-        Variable assignment resolves "their" → "ABC123" from context.
-        
-        Tracks:
-        - Entity references across turns
-        - Temporal references ("yesterday", "last week")
-        - Anaphora resolution ("it", "them", "that")
-        """
-        
-    async def compute_confidence(self, intent: str, entities: Dict, sub_intents: List[SubIntent]) -> ConfidenceScore:
-        """
-        Multi-dimensional confidence scoring with uncertainty quantification.
-        
-        Dimensions:
-        1. Intent confidence: How certain is the intent classification?
-        2. Entity confidence: How certain are entity extractions?
-        3. Completeness confidence: Are all required entities present?
-        4. Ambiguity score: How ambiguous is the query?
-        5. Context confidence: How well does context support interpretation?
-        
-        Returns confidence vector and overall score.
-        """
-        
-    async def detect_fallback_need(self, confidence: ConfidenceScore, entities: EntityExtractionResult) -> FallbackStrategy:
-        """
-        Determine if fallback/clarification is needed and select strategy.
-        
-        Strategies:
-        1. Request missing required entities
-        2. Disambiguate between multiple interpretations
-        3. Confirm low-confidence interpretation
-        4. Suggest alternative phrasings
-        5. Route to human for complex queries
-        """
-        
-    async def detect_ambiguity(self, query: str) -> AmbiguityScore:
-        """
-        Identify ambiguous queries requiring clarification.
-        
-        Ambiguity types:
-        - Lexical: Word has multiple meanings
-        - Syntactic: Sentence structure unclear
-        - Semantic: Intent unclear from context
-        - Referential: Unclear what entities refer to
-        """
-        
-    async def classify_query_type(self, query: str, abstract_intent: AbstractIntent) -> QueryType:
-        """
-        Classify as SQL, data story, general QA, visualization, etc.
-        
-        Uses abstract intent to determine query category before detailed parsing.
-        """
+    async def parse_intent(self, query: str, context: ConversationContext) -> IntentContext:
+        """Parse intent using ReAct pattern for multi-step reasoning"""
+
+def step_back_reasoning(self, query: str) -> AbstractIntent:
+        """Abstract query to higher-level concepts before detailed parsing"""
+
+    async def extract_entities(self, query: str) -> EntityExtractionResult:
+        """Extract required and optional entities with confidence"""
+
+    async def resolve_entities(self, entities: Dict, context: ConversationContext) -> Dict[str, CanonicalEntity]:
+        """Ground entity names using Mapper MCP"""
 ```
 
-**Output**:
+**Advanced Techniques:**
+1. **Multi-Step Planning:** Decompose complex queries into sequential sub-intents
+2. **Variable Assignment:** Track entities across multi-turn conversations
+3. **Step-Back Reasoning:** Abstract query to higher-level concepts
+4. **Confidence Scoring:** Multi-dimensional confidence with uncertainty quantification
+5. **Fallback Detection:** Graceful degradation with clarification strategies
+
+**Tools (MCP):**
+- **Mapper Tool:** `resolve_entity(text: str, domain: str) -> List[CanonicalEntity]`
+  - Stateless embedding/fuzzy search to resolve entity names (e.g., "Acme" → `ID: CUST-123`)
+  - Backends: ElasticSearch / Vector DB
+
+**Output:** `IntentContext` with fields:
+- `trace_id`: UUID for tracking
+- `intent_type`: `lookup | aggregation | comparison | sql_generation | data_story`
+- `entities`: List of grounded CanonicalEntity objects
+- `unresolved_slots`: Required entities not found
+- `confidence_score`: Multi-dimensional confidence
+- `policy_flags``: PII, topic restrictions detected
+
+**Example:**
 ```python
-@dataclass
-class AbstractIntent:
-    """High-level query pattern before detailed parsing"""
-    pattern: str  # e.g., "temporal_data_retrieval", "comparison_analysis"
-    complexity: Literal["simple", "moderate", "complex"]
-    requires_multi_step: bool
-    estimated_sub_intents: int
-
-@dataclass
-class SubIntent:
-    """Individual step in multi-step query plan"""
-    step_number: int
-    intent: str
-    entities: Dict[str, Any]
-    dependencies: List[int]  # Which steps must complete first
-    optional: bool  # Can this step be skipped if it fails?
-
-@dataclass
-class EntityExtractionResult:
-    """Entity extraction with required/optional classification"""
-    required_entities: Dict[str, Any]
-    optional_entities: Dict[str, Any]
-    missing_required: List[str]
-    entity_confidence: Dict[str, float]
-
-@dataclass
-class ConfidenceScore:
-    """Multi-dimensional confidence with uncertainty quantification"""
-    intent_confidence: float  # 0-1
-    entity_confidence: float  # 0-1
-    completeness_confidence: float  # 0-1
-    ambiguity_score: float  # 0-1 (higher = more ambiguous)
-    context_confidence: float  # 0-1
-    overall_confidence: float  # Weighted average
-    uncertainty: float  # Epistemic uncertainty estimate
-
-@dataclass
-class FallbackStrategy:
-    """Strategy for handling low-confidence or incomplete parses"""
-    strategy_type: Literal[
-        "request_entities",
-        "disambiguate",
-        "confirm_interpretation",
-        "suggest_rephrase",
-        "route_to_human"
-    ]
-    clarification_questions: List[str]
-    suggested_alternatives: List[str]
-    can_proceed_with_defaults: bool
-
-@dataclass
-class ConversationContext:
-    """Context from previous conversation turns"""
-    previous_queries: List[str]
-    previous_intents: List[IntentResult]
-    entity_history: Dict[str, Any]  # Entities mentioned in conversation
-    temporal_context: datetime  # When conversation started
-    user_preferences: Dict[str, Any]
-
-@dataclass
-class IntentResult:
-    """Complete intent parsing result with all advanced features"""
-    # Core intent
-    intent: str
-    query_type: QueryType
-    
-    # Multi-step planning
-    abstract_intent: AbstractIntent
-    sub_intents: List[SubIntent]
-    execution_plan: List[int]  # Ordered list of sub-intent step numbers
-    
-    # Entity extraction
-    entities: Dict[str, Any]  # All entities (required + optional)
-    required_entities: Dict[str, Any]
-    optional_entities: Dict[str, Any]
-    missing_required: List[str]
-    
-    # Confidence and ambiguity
-    confidence: ConfidenceScore
-    ambiguity_score: float
-    
-    # Fallback and recovery
-    requires_clarification: bool
-    fallback_strategy: Optional[FallbackStrategy]
-    
-    # Context tracking
-    resolved_from_context: Dict[str, Any]  # Entities resolved from history
-    conversation_context: ConversationContext
-```
-
-**Implementation Example**:
-
-```python
-class IntentParserAgent:
-    def __init__(self, llm_model: str = "gpt-4"):
-        self.llm = LLMClient(model=llm_model)
-        self.entity_extractor = EntityExtractor()
-        self.confidence_estimator = ConfidenceEstimator()
-        
-    async def parse_intent(self, query: str, context: ConversationContext) -> IntentResult:
-        # Step 1: Step-back reasoning
-        abstract_intent = await self.step_back_reasoning(query)
-        
-        # Step 2: Multi-step planning (if complex)
-        if abstract_intent.requires_multi_step:
-            sub_intents = await self.multi_step_planning(query, abstract_intent)
-        else:
-            sub_intents = [SubIntent(
-                step_number=1,
-                intent=abstract_intent.pattern,
-                entities={},
-                dependencies=[],
-                optional=False
-            )]
-        
-        # Step 3: Entity extraction
-        entity_result = await self.extract_entities(query, sub_intents)
-        
-        # Step 4: Variable assignment from context
-        resolved_entities = await self.assign_variables(
-            entity_result.required_entities,
-            context
-        )
-        
-        # Step 5: Confidence scoring
-        confidence = await self.compute_confidence(
-            abstract_intent.pattern,
-            resolved_entities,
-            sub_intents
-        )
-        
-        # Step 6: Fallback detection
-        fallback = await self.detect_fallback_need(confidence, entity_result)
-        
-        # Step 7: Query type classification
-        query_type = await self.classify_query_type(query, abstract_intent)
-        
-        return IntentResult(
-            intent=abstract_intent.pattern,
-            query_type=query_type,
-            abstract_intent=abstract_intent,
-            sub_intents=sub_intents,
-            execution_plan=[s.step_number for s in sub_intents],
-            entities={**entity_result.required_entities, **entity_result.optional_entities},
-            required_entities=entity_result.required_entities,
-            optional_entities=entity_result.optional_entities,
-            missing_required=entity_result.missing_required,
-            confidence=confidence,
-            ambiguity_score=confidence.ambiguity_score,
-            requires_clarification=fallback.strategy_type != "none",
-            fallback_strategy=fallback if fallback.strategy_type != "none" else None,
-            resolved_from_context=resolved_entities,
-            conversation_context=context
-        )
-```
-
-**Example Execution**:
-
-```python
-# Complex query with multi-step planning
-query = "Compare revenue between Q1 and Q2 for customer ABC123, then show their top 5 products"
-context = ConversationContext(
-    previous_queries=[],
-    previous_intents=[],
-    entity_history={},
-    temporal_context=datetime.now(),
-    user_preferences={}
+# Input: "Show me orders from customer ABC123 in the last week"
+# Output:
+IntentContext(
+    trace_id="uuid-123",
+    intent_type="lookup",
+    entities=[
+        CanonicalEntity(id="CUST-ABC123", type="customer", confidence=0.98),
+        CanonicalEntity(id="last_7_days", type="timeframe", confidence=0.95)
+    ],
+    unresolved_slots=[],
+    confidence_score=0.92,
+    requires_clarification=False
 )
-
-result = await intent_parser.parse_intent(query, context)
-
-# Result:
-# abstract_intent.pattern = "temporal_comparison_with_ranking"
-# abstract_intent.complexity = "complex"
-# abstract_intent.requires_multi_step = True
-# 
-# sub_intents = [
-#     SubIntent(1, "retrieve_revenue", {"customer": "ABC123", "period": "Q1"}, [], False),
-#     SubIntent(2, "retrieve_revenue", {"customer": "ABC123", "period": "Q2"}, [], False),
-#     SubIntent(3, "compute_comparison", {"periods": ["Q1", "Q2"]}, [1, 2], False),
-#     SubIntent(4, "retrieve_products", {"customer": "ABC123"}, [], False),
-#     SubIntent(5, "rank_products", {"limit": 5, "metric": "revenue"}, [4], False)
-# ]
-# 
-# confidence.overall_confidence = 0.92
-# requires_clarification = False
 ```
 
-### 3. Vector Store Adapter Pattern
+### 3.2. Planner Agent (The Router & Loop Manager)
 
-**Design Philosophy**: Use adapter pattern to enable easy switching between vector databases via configuration.
+**Pattern:** `State Machine` / `Loop`
+**Responsibility:** The specific authority on "Is this query ready?" Manages workflow routing and clarification loops.
 
-**Supported Vector Stores**:
-- PostgreSQL + pgvector (default, simplest setup)
-- Weaviate (production-grade, cloud-native)
-- Pinecone (managed service)
-- Qdrant (high-performance)
-- Azure AI Search (Azure-native)
-
-**Adapter Interface**:
-
+**Key Logic:**
 ```python
-from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional
-from pydantic import BaseModel
+class PlannerAgent:
+    async def decide(self, intent: IntentContext) -> Union[ExecutionPlan, ClarificationRequest]:
+        """Route query to appropriate workflow"""
 
-class VectorStoreConfig(BaseModel):
-    """Configuration for vector store"""
-    provider: str  # "pgvector", "weaviate", "pinecone", "qdrant", "azure_ai_search"
-    connection_string: str
-    index_name: str
-    embedding_dimension: int = 1536
-    distance_metric: str = "cosine"
-    additional_config: Dict[str, Any] = {}
+    async def check_policy(self, intent: IntentContext) -> PolicyCheckResult:
+        """Invoke Parlant middleware for compliance check"""
 
-class VectorStoreAdapter(ABC):
-    """Abstract base class for vector store adapters"""
-    
-    def __init__(self, config: VectorStoreConfig):
-        self.config = config
-    
-    @abstractmethod
-    async def connect(self) -> None:
-        """Establish connection to vector store"""
-        pass
-    
-    @abstractmethod
-    async def disconnect(self) -> None:
-        """Close connection to vector store"""
-        pass
-    
-    @abstractmethod
-    async def create_index(self, index_name: str, dimension: int) -> None:
-        """Create vector index"""
-        pass
-    
-    @abstractmethod
-    async def insert(self, documents: List[Document]) -> None:
-        """Insert documents with embeddings"""
-        pass
-    
-    @abstractmethod
-    async def search(
+    async def create_one_pass_plan(self, intent: IntentContext) -> ExecutionPlan:
+        """Fast path for clear intents"""
+
+    async def create_two_pass_plan(self, intent: IntentContext) -> ClarificationRequest:
+        """Ambiguous query requiring user clarification"""
+```
+
+**Workflow Routing:**
+1. **Policy Check:** Middleware calls Parlant to evaluate for PII, topic restrictions
+2. **Completeness Check:** If `unresolved_slots` not empty and `confidence_score < 0.7`
+   - **Route:** Two-Pass workflow → generate clarification chips
+3. **Clear Intent:** If `unresolved_slots` empty and `confidence_score >= 0.7`
+   - **Route:** One-Pass workflow → proceed to Translator
+
+**State Persistence:** Maintains conversation state across HIL interactions
+
+**Output:**
+- `ExecutionPlan` for One-Pass (includes routing to Translator)
+- `ClarificationRequest` for Two-Pass (includes clarification options)
+
+### 3.3. Translator Agent (The Linguist)
+
+**Pattern:** `Sequential` (RAG-on-Schema)
+**Responsibility:** Convert natural language intent into executable DB dialects (SQL, Cypher, GraphQL). **Never executes queries.**
+
+**Interface:**
+```python
+class TranslatorAgent:
+    async def formulate_queries(
         self,
-        query_embedding: List[float],
-        top_k: int = 10,
-        filters: Optional[Dict[str, Any]] = None
-    ) -> List[Document]:
-        """Semantic search with optional metadata filters"""
-        pass
-    
-    @abstractmethod
-    async def hybrid_search(
-        self,
-        query_embedding: List[float],
-        query_text: str,
-        top_k: int = 10,
-        alpha: float = 0.5,  # Balance between semantic and keyword
-        filters: Optional[Dict[str, Any]] = None
-    ) -> List[Document]:
-        """Hybrid search combining semantic and keyword search"""
-        pass
-    
-    @abstractmethod
-    async def delete(self, document_ids: List[str]) -> None:
-        """Delete documents by IDs"""
-        pass
-    
-    @abstractmethod
-    async def update_metadata(self, document_id: str, metadata: Dict[str, Any]) -> None:
-        """Update document metadata"""
-        pass
+        plan: ExecutionPlan,
+        context: IntentContext
+    ) -> List[RetrievalPayload]:
+        """Generate executable queries using schema-aware approach"""
+
+    async def get_schema_context(self, keywords: List[str]) -> SchemaContext:
+        """Query Schema Registry MCP for relevant tables/schemas"""
+
+    async def generate_sql(self, intent: IntentContext, schema: SchemaContext) -> str:
+        """Generate SQL with schema validation"""
+
+    async def generate_vector_query(self, intent: IntentContext) -> Dict:
+        """Generate vector search filters"""
 ```
 
-**Concrete Implementations**:
+**RAG-on-Schema Process:**
+1. **Discovery:** Queries Schema Registry MCP to find relevant tables
+   - `find_tables(keywords: list[str])` → returns matching table names
+   - `get_ddl(table_names: list[str])` → returns table schemas
+2. **Generation:** Writes schema-valid query strings using structured generation
+3. **Validation:** Ensures all table/column references exist in schema
+4. **Handoff:** Returns `RetrievalPayload` targeting specific Domain Experts
 
-**1. PostgreSQL + pgvector Adapter:**
+**Benefits:**
+- **Deterministic:** Translator never hallucinates tables/columns
+- **Secure:** Translator doesn't have DB credentials
+- **Auditable:** All queries logged with schema version references
 
+**Tools (MCP):**
+- **Schema Registry:** `search_context(keywords)`, `get_schema_details(tables)`, `get_query_examples(intent)`
+
+**Output:** `RetrievalPayload` with fields:
+- `task_id`: UUID for tracking
+- `target_retriever`: `structured | vector | graph | api`
+- `executable_query`: SQL or JSON filter
+- `query_dialect`: `postgres`, `cypher`, `graphql`, `semantic_filter`
+- `explanation`: Audit log description
+
+### 3.4. Domain Experts (The Retrievers)
+
+**Pattern:** `Concurrent` (Fan-out)
+**Responsibility:** Execute queries against data sources. Dumb execution pipes with minimal/no LLM usage.
+
+**Types:**
+1. **StructuredExpert:** Executes SQL queries (PostgreSQL, ClickHouse)
+2. **UnstructuredExpert:** Executes vector searches (pgvector, Weaviate, Pinecone)
+3. **GraphExpert:** Executes graph queries (Neo4j, Neptune)
+4. **APIExpert:** Calls REST APIs with authentication
+
+**Security:** These agents hold database credentials. The Translator (LLM) *never* sees credentials, only schema.
+
+**Implementation:**
 ```python
-import asyncpg
-from pgvector.asyncpg import register_vector
+class StructuredExpert:
+    def __init__(self, db_pool: asyncpg.Pool):
+        self.db = db_pool
 
-class PgVectorAdapter(VectorStoreAdapter):
-    """PostgreSQL + pgvector adapter for hybrid search"""
-    
-    def __init__(self, config: VectorStoreConfig):
-        super().__init__(config)
-        self.pool: Optional[asyncpg.Pool] = None
-    
-    async def connect(self) -> None:
-        """Establish connection pool"""
-        self.pool = await asyncpg.create_pool(
-            self.config.connection_string,
-            min_size=5,
-            max_size=20
+    async def execute(self, payload: RetrievalPayload) -> RetrievalResult:
+        """Execute SQL query and return results"""
+        results = await self.db.fetch(payload.executable_query)
+        return RetrievalResult(
+            source_agent="structured_expert",
+            data=results,
+            meta={"row_count": len(results), "query_time_ms": elapsed}
         )
-        async with self.pool.acquire() as conn:
-            await register_vector(conn)
-    
-    async def disconnect(self) -> None:
-        """Close connection pool"""
-        if self.pool:
-            await self.pool.close()
-    
-    async def create_index(self, index_name: str, dimension: int) -> None:
-        """Create IVFFlat index for fast similarity search"""
-        async with self.pool.acquire() as conn:
-            await conn.execute(f"""
-                CREATE INDEX IF NOT EXISTS {index_name}_embedding_idx 
-                ON {index_name} 
-                USING ivfflat (embedding vector_cosine_ops) 
-                WITH (lists = 100)
-            """)
-            # Create GIN index for full-text search (hybrid)
-            await conn.execute(f"""
-                CREATE INDEX IF NOT EXISTS {index_name}_content_idx 
-                ON {index_name} 
-                USING gin(to_tsvector('english', content))
-            """)
-    
-    async def search(
-        self,
-        query_embedding: List[float],
-        top_k: int = 10,
-        filters: Optional[Dict[str, Any]] = None
-    ) -> List[Document]:
-        """Semantic search using cosine similarity"""
-        async with self.pool.acquire() as conn:
-            where_clause = self._build_where_clause(filters)
-            query = f"""
-                SELECT id, content, source, lob, confidence, metadata, 
-                       embedding <=> $1 AS distance
-                FROM {self.config.index_name}
-                {where_clause}
-                ORDER BY distance
-                LIMIT $2
-            """
-            rows = await conn.fetch(query, query_embedding, top_k)
-            return [self._row_to_document(row) for row in rows]
-    
-    async def hybrid_search(
-        self,
-        query_embedding: List[float],
-        query_text: str,
-        top_k: int = 10,
-        alpha: float = 0.5,
-        filters: Optional[Dict[str, Any]] = None
-    ) -> List[Document]:
-        """Hybrid search combining semantic and full-text search"""
-        async with self.pool.acquire() as conn:
-            where_clause = self._build_where_clause(filters)
-            query = f"""
-                WITH semantic_results AS (
-                    SELECT id, content, source, lob, confidence, metadata,
-                           1 - (embedding <=> $1) AS semantic_score
-                    FROM {self.config.index_name}
-                    {where_clause}
-                ),
-                keyword_results AS (
-                    SELECT id, content, source, lob, confidence, metadata,
-                           ts_rank(to_tsvector('english', content), 
-                                   plainto_tsquery('english', $2)) AS keyword_score
-                    FROM {self.config.index_name}
-                    {where_clause}
-                )
-                SELECT DISTINCT ON (s.id)
-                    s.id, s.content, s.source, s.lob, s.confidence, s.metadata,
-                    ($3 * s.semantic_score + (1 - $3) * COALESCE(k.keyword_score, 0)) AS combined_score
-                FROM semantic_results s
-                LEFT JOIN keyword_results k ON s.id = k.id
-                ORDER BY combined_score DESC
-                LIMIT $4
-            """
-            rows = await conn.fetch(query, query_embedding, query_text, alpha, top_k)
-            return [self._row_to_document(row) for row in rows]
-    
-    def _build_where_clause(self, filters: Optional[Dict[str, Any]]) -> str:
-        """Build WHERE clause from filters"""
-        if not filters:
-            return ""
-        conditions = []
-        for key, value in filters.items():
-            if isinstance(value, list):
-                conditions.append(f"{key} = ANY(${len(conditions) + 3})")
-            else:
-                conditions.append(f"{key} = ${len(conditions) + 3}")
-        return "WHERE " + " AND ".join(conditions) if conditions else ""
-    
-    def _row_to_document(self, row) -> Document:
-        """Convert database row to Document"""
-        return Document(
-            id=row['id'],
-            content=row['content'],
-            source=row['source'],
-            lob=LOB(row['lob']),
-            confidence=row['confidence'],
-            metadata=row['metadata'],
-            timestamp=row.get('created_at', datetime.now())
-        )
-```
 
-**2. Weaviate Adapter:**
-
-```python
-import weaviate
-from weaviate.classes.query import MetadataQuery
-
-class WeaviateAdapter(VectorStoreAdapter):
-    """Weaviate adapter for production-grade vector search"""
-    
-    def __init__(self, config: VectorStoreConfig):
-        super().__init__(config)
-        self.client: Optional[weaviate.Client] = None
-    
-    async def connect(self) -> None:
-        """Connect to Weaviate cluster"""
-        self.client = weaviate.Client(
-            url=self.config.connection_string,
-            additional_headers=self.config.additional_config.get("headers", {})
-        )
-    
-    async def disconnect(self) -> None:
-        """Close Weaviate connection"""
-        if self.client:
-            self.client.close()
-    
-    async def create_index(self, index_name: str, dimension: int) -> None:
-        """Create Weaviate class (index)"""
-        class_obj = {
-            "class": index_name,
-            "vectorizer": "none",  # We provide embeddings
-            "moduleConfig": {
-                "text2vec-openai": {"skip": True}
-            },
-            "properties": [
-                {"name": "content", "dataType": ["text"]},
-                {"name": "source", "dataType": ["string"]},
-                {"name": "lob", "dataType": ["string"]},
-                {"name": "confidence", "dataType": ["number"]},
-                {"name": "metadata", "dataType": ["object"]},
-            ]
-        }
-        self.client.schema.create_class(class_obj)
-    
-    async def search(
-        self,
-        query_embedding: List[float],
-        top_k: int = 10,
-        filters: Optional[Dict[str, Any]] = None
-    ) -> List[Document]:
-        """Semantic search using Weaviate"""
-        query = self.client.query.get(
-            self.config.index_name,
-            ["content", "source", "lob", "confidence", "metadata"]
-        ).with_near_vector({
-            "vector": query_embedding
-        }).with_limit(top_k)
-        
-        if filters:
-            query = query.with_where(self._build_weaviate_filter(filters))
-        
-        result = query.do()
-        return [self._weaviate_to_document(obj) for obj in result["data"]["Get"][self.config.index_name]]
-    
-    async def hybrid_search(
-        self,
-        query_embedding: List[float],
-        query_text: str,
-        top_k: int = 10,
-        alpha: float = 0.5,
-        filters: Optional[Dict[str, Any]] = None
-    ) -> List[Document]:
-        """Hybrid search using Weaviate's native hybrid search"""
-        query = self.client.query.get(
-            self.config.index_name,
-            ["content", "source", "lob", "confidence", "metadata"]
-        ).with_hybrid(
-            query=query_text,
-            vector=query_embedding,
-            alpha=alpha  # 0 = pure keyword, 1 = pure vector
-        ).with_limit(top_k)
-        
-        if filters:
-            query = query.with_where(self._build_weaviate_filter(filters))
-        
-        result = query.do()
-        return [self._weaviate_to_document(obj) for obj in result["data"]["Get"][self.config.index_name]]
-    
-    def _build_weaviate_filter(self, filters: Dict[str, Any]) -> Dict:
-        """Build Weaviate filter from dict"""
-        # Simplified - expand based on needs
-        return {
-            "operator": "And",
-            "operands": [
-                {"path": [key], "operator": "Equal", "valueString": value}
-                for key, value in filters.items()
-            ]
-        }
-    
-    def _weaviate_to_document(self, obj: Dict) -> Document:
-        """Convert Weaviate object to Document"""
-        return Document(
-            id=obj["_additional"]["id"],
-            content=obj["content"],
-            source=obj["source"],
-            lob=LOB(obj["lob"]),
-            confidence=obj["confidence"],
-            metadata=obj.get("metadata", {}),
-            timestamp=datetime.now()
-        )
-```
-
-**Vector Store Factory:**
-
-```python
-class VectorStoreFactory:
-    """Factory for creating vector store adapters"""
-    
-    _adapters = {
-        "pgvector": PgVectorAdapter,
-        "weaviate": WeaviateAdapter,
-        # Add more as needed
-        # "pinecone": PineconeAdapter,
-        # "qdrant": QdrantAdapter,
-        # "azure_ai_search": AzureAISearchAdapter,
-    }
-    
-    @classmethod
-    def create(cls, config: VectorStoreConfig) -> VectorStoreAdapter:
-        """Create vector store adapter based on config"""
-        adapter_class = cls._adapters.get(config.provider)
-        if not adapter_class:
-            raise ValueError(f"Unsupported vector store provider: {config.provider}")
-        return adapter_class(config)
-    
-    @classmethod
-    def from_env(cls) -> VectorStoreAdapter:
-        """Create adapter from environment variables"""
-        config = VectorStoreConfig(
-            provider=os.getenv("VECTOR_STORE_PROVIDER", "pgvector"),
-            connection_string=os.getenv("VECTOR_STORE_CONNECTION_STRING"),
-            index_name=os.getenv("VECTOR_STORE_INDEX_NAME", "documents"),
-            embedding_dimension=int(os.getenv("EMBEDDING_DIMENSION", "1536")),
-            distance_metric=os.getenv("DISTANCE_METRIC", "cosine")
-        )
-        return cls.create(config)
-```
-
-**Configuration Examples:**
-
-```yaml
-# config/vector_store.yaml
-
-# PostgreSQL + pgvector (default)
-pgvector:
-  provider: pgvector
-  connection_string: postgresql://user:pass@localhost:5432/rag_db
-  index_name: documents
-  embedding_dimension: 1536
-  distance_metric: cosine
-
-# Weaviate
-weaviate:
-  provider: weaviate
-  connection_string: http://localhost:8080
-  index_name: Documents
-  embedding_dimension: 1536
-  additional_config:
-    headers:
-      X-OpenAI-Api-Key: ${OPENAI_API_KEY}
-
-# Easy switching via environment variable
-# VECTOR_STORE_PROVIDER=weaviate
-# VECTOR_STORE_PROVIDER=pgvector
-```
-
-### 3.5. Agent Runtime Configuration (Microsoft Agent Framework)
-
-**Design Philosophy**: Leverage Microsoft Agent Framework's built-in runtime abstraction for flexible deployment - SingleThreadedAgentRuntime for single-process or GrpcWorkerAgentRuntime for distributed deployments.
-
-**Supported Runtime Modes**:
-- SingleThreadedAgentRuntime (default, high-performance for single-process)
-- GrpcWorkerAgentRuntime (distributed, multi-process communication via gRPC)
-
-**Microsoft Agent Framework Runtime Interface**:
-
-```python
-from autogen_core import (
-    AgentRuntime,
-    SingleThreadedAgentRuntime,
-    RoutedAgent,
-    MessageContext,
-    message_handler
-)
-from autogen_ext.runtimes.grpc import GrpcWorkerAgentRuntime, GrpcWorkerAgentRuntimeHost
-from typing import Literal
-from pydantic import BaseModel
-
-class RuntimeConfig(BaseModel):
-    """Configuration for agent runtime"""
-    mode: Literal["single_threaded", "grpc_distributed"] = "single_threaded"
-    grpc_host_address: str = "localhost:50051"  # For distributed mode
-    
-class RuntimeFactory:
-    """Factory for creating agent runtimes using Microsoft Agent Framework"""
-    
-    @staticmethod
-    async def create_runtime(config: RuntimeConfig) -> AgentRuntime:
-        """Create appropriate runtime based on configuration"""
-        if config.mode == "single_threaded":
-            return SingleThreadedAgentRuntime()
-        elif config.mode == "grpc_distributed":
-            runtime = GrpcWorkerAgentRuntime(host_address=config.grpc_host_address)
-            await runtime.start()
-            return runtime
-        else:
-            raise ValueError(f"Unknown runtime mode: {config.mode}")
-    
-    @staticmethod
-    def from_env() -> RuntimeConfig:
-        """Create runtime config from environment variables"""
-        import os
-        return RuntimeConfig(
-            mode=os.getenv("AGENT_RUNTIME_MODE", "single_threaded"),
-            grpc_host_address=os.getenv("GRPC_HOST_ADDRESS", "localhost:50051")
-        )
-```
-
-**Agent Implementation Using Microsoft Agent Framework**:
-
-**1. Example Agent with Message Handlers:**
-
-```python
-from dataclasses import dataclass
-from autogen_core import RoutedAgent, MessageContext, message_handler, AgentId
-
-@dataclass
-class IntentParseRequest:
-    """Message type for intent parsing requests"""
-    query: str
-    user_id: str
-    conversation_context: Optional[Dict[str, Any]] = None
-
-@dataclass
-class IntentParseResponse:
-    """Message type for intent parsing responses"""
-    intent: str
-    entities: Dict[str, Any]
-    confidence: float
-    query_type: str
-
-class IntentParserAgent(RoutedAgent):
-    """Intent Parser Agent using Microsoft Agent Framework"""
-    
-    def __init__(self) -> None:
-        super().__init__("Intent Parser Agent")
-        self.llm_client = LLMClient()
-    
-    @message_handler
-    async def handle_intent_parse_request(
-        self, 
-        message: IntentParseRequest, 
-        ctx: MessageContext
-    ) -> IntentParseResponse:
-        """
-        Handle intent parsing requests
-        
-        Microsoft Agent Framework automatically routes messages
-        to this handler based on message type.
-        """
-        # Parse intent using LLM
-        intent_result = await self.parse_intent(
-            message.query,
-            message.conversation_context
-        )
-        
-        # Return response (automatically sent back to caller)
-        return IntentParseResponse(
-            intent=intent_result.intent,
-            entities=intent_result.entities,
-            confidence=intent_result.confidence.overall_confidence,
-            query_type=intent_result.query_type
-        )
-    
-    async def parse_intent(self, query: str, context: Optional[Dict]) -> IntentResult:
-        """Internal method for intent parsing logic"""
-        # Implementation details...
-        pass
-```
-
-**2. Runtime Setup and Agent Registration:**
-
-```python
-async def setup_single_threaded_runtime():
-    """Setup SingleThreadedAgentRuntime for single-process deployment"""
-    from autogen_core import SingleThreadedAgentRuntime
-    
-    # Create runtime
-    runtime = SingleThreadedAgentRuntime()
-    
-    # Register agents with runtime
-    # Runtime manages agent lifecycle and message routing
-    await IntentParserAgent.register(
-        runtime, 
-        "intent_parser",
-        lambda: IntentParserAgent()
-    )
-    
-    await KnowledgeRetrieverAgent.register(
-        runtime,
-        "knowledge_retriever", 
-        lambda: KnowledgeRetrieverAgent()
-    )
-    
-    # Start runtime
-    runtime.start()
-    
-    return runtime
-
-async def setup_distributed_runtime():
-    """Setup GrpcWorkerAgentRuntime for distributed deployment"""
-    from autogen_ext.runtimes.grpc import (
-        GrpcWorkerAgentRuntime,
-        GrpcWorkerAgentRuntimeHost
-    )
-    
-    # Start host service (runs separately, typically in its own process)
-    host = GrpcWorkerAgentRuntimeHost(address="localhost:50051")
-    host.start()
-    
-    # Create worker runtime
-    worker = GrpcWorkerAgentRuntime(host_address="localhost:50051")
-    await worker.start()
-    
-    # Register agents with worker
-    await IntentParserAgent.register(
-        worker,
-        "intent_parser",
-        lambda: IntentParserAgent()
-    )
-    
-    await KnowledgeRetrieverAgent.register(
-        worker,
-        "knowledge_retriever",
-        lambda: KnowledgeRetrieverAgent()
-    )
-    
-    return worker, host
-```
-
-**3. Sending Messages Between Agents:**
-
-```python
-async def orchestrate_query(runtime: AgentRuntime, query: str, user_id: str):
-    """Orchestrate query processing using Microsoft Agent Framework"""
-    
-    # Send message to Intent Parser Agent
-    # Runtime handles message delivery and routing
-    intent_response = await runtime.send_message(
-        IntentParseRequest(query=query, user_id=user_id),
-        AgentId("intent_parser", "default")
-    )
-    
-    # Send message to Knowledge Retriever Agent
-    retrieval_response = await runtime.send_message(
-        RetrievalRequest(
-            query=query,
-            intent=intent_response.intent,
-            entities=intent_response.entities
-        ),
-        AgentId("knowledge_retriever", "default")
-    )
-    
-    # Continue orchestration...
-    return retrieval_response
-```
-
-**Runtime Factory with Environment Configuration:**
-
-```python
-import os
-from typing import Literal, Optional
-from pydantic import BaseModel
-
-class RuntimeConfig(BaseModel):
-    """Configuration for Microsoft Agent Framework runtime"""
-    mode: Literal["single_threaded", "grpc_distributed"] = "single_threaded"
-    grpc_host_address: str = "localhost:50051"
-    grpc_worker_count: int = 1  # Number of worker processes for distributed mode
-
-class RuntimeFactory:
-    """Factory for creating Microsoft Agent Framework runtimes"""
-    
-    @classmethod
-    async def create_runtime(cls, config: RuntimeConfig) -> AgentRuntime:
-        """Create appropriate runtime based on configuration"""
-        if config.mode == "single_threaded":
-            runtime = SingleThreadedAgentRuntime()
-            runtime.start()
-            return runtime
-            
-        elif config.mode == "grpc_distributed":
-            # For distributed mode, return worker runtime
-            # Host should be started separately (typically in its own process)
-            worker = GrpcWorkerAgentRuntime(host_address=config.grpc_host_address)
-            await worker.start()
-            return worker
-        else:
-            raise ValueError(f"Unsupported runtime mode: {config.mode}")
-    
-    @classmethod
-    def from_env(cls) -> RuntimeConfig:
-        """Create runtime config from environment variables"""
-        return RuntimeConfig(
-            mode=os.getenv("AGENT_RUNTIME_MODE", "single_threaded"),
-            grpc_host_address=os.getenv("GRPC_HOST_ADDRESS", "localhost:50051"),
-            grpc_worker_count=int(os.getenv("GRPC_WORKER_COUNT", "1"))
-        )
-```
-
-**Configuration Examples:**
-
-```yaml
-# config/runtime.yaml
-
-# Single-Threaded (default) - Single process, high performance
-single_threaded:
-  mode: single_threaded
-
-# gRPC Distributed - Multi-process deployment
-grpc_distributed:
-  mode: grpc_distributed
-  grpc_host_address: localhost:50051
-  grpc_worker_count: 3
-
-# Easy switching via environment variable
-# AGENT_RUNTIME_MODE=single_threaded  (default)
-# AGENT_RUNTIME_MODE=grpc_distributed
-# GRPC_HOST_ADDRESS=localhost:50051
-# GRPC_WORKER_COUNT=3
-```
-
-**Usage in Orchestrator:**
-
-```python
-from autogen_core import RoutedAgent, MessageContext, message_handler, AgentId
-
-class OrchestratorAgent(RoutedAgent):
-    """Orchestrator using Microsoft Agent Framework"""
-    
-    def __init__(self, runtime: AgentRuntime) -> None:
-        super().__init__("Orchestrator Agent")
-        self.runtime = runtime
-    
-    @message_handler
-    async def handle_query_request(
-        self,
-        message: QueryRequest,
-        ctx: MessageContext
-    ) -> QueryResponse:
-        """Handle incoming query requests"""
-        
-        # Execute Plan-and-Execute workflow
-        context = ExecutionContext(query=message.query, user_id=message.user_id)
-        plan = await self.create_plan(message.query, context)
-        
-        # Execute tasks by sending messages to agents
-        await self.execute_plan(plan, context)
-        
-        # Return aggregated results
-        return QueryResponse(
-            answer=context.generated_answer.text,
-            sources=context.generated_answer.sources,
-            confidence=context.evaluation.overall_score
-        )
-    
-    async def execute_task(self, task: AgentTask, context: ExecutionContext) -> None:
-        """Execute task by sending message to appropriate agent"""
-        
-        if task == AgentTask.PARSE_INTENT:
-            # Send message to Intent Parser Agent via runtime
-            response = await self.runtime.send_message(
-                IntentParseRequest(
-                    query=context.query,
-                    user_id=context.user_id,
-                    conversation_context=context.conversation_context
-                ),
-                AgentId("intent_parser", "default")
-            )
-            context.intent = response
-        
-        elif task == AgentTask.RETRIEVE_KNOWLEDGE:
-            # Send message to Knowledge Retriever Agent
-            response = await self.runtime.send_message(
-                RetrievalRequest(
-                    query=context.query,
-                    intent=context.intent.intent,
-                    entities=context.intent.entities
-                ),
-                AgentId("knowledge_retriever", "default")
-            )
-            context.retrieved_documents = response.documents
-        
-        # Similar for other agents...
-
-# Initialize application with Microsoft Agent Framework
-async def main():
-    # Create runtime from environment config
-    config = RuntimeFactory.from_env()
-    runtime = await RuntimeFactory.create_runtime(config)
-    
-    # Register all agents with runtime
-    # Runtime manages agent lifecycle and message routing
-    await IntentParserAgent.register(runtime, "intent_parser", lambda: IntentParserAgent())
-    await KnowledgeRetrieverAgent.register(runtime, "knowledge_retriever", lambda: KnowledgeRetrieverAgent())
-    await AnswerGeneratorAgent.register(runtime, "answer_generator", lambda: AnswerGeneratorAgent())
-    await EvaluatorAgent.register(runtime, "evaluator", lambda: EvaluatorAgent())
-    await OrchestratorAgent.register(runtime, "orchestrator", lambda: OrchestratorAgent(runtime))
-    
-    # Send query to orchestrator
-    response = await runtime.send_message(
-        QueryRequest(query="What is RAG?", user_id="test"),
-        AgentId("orchestrator", "default")
-    )
-    
-    print(f"Answer: {response.answer}")
-    
-    # Cleanup
-    await runtime.stop()
-```
-
-**Benefits of Microsoft Agent Framework:**
-
-1. **Flexible Deployment**: Start with SingleThreadedAgentRuntime, scale to GrpcWorkerAgentRuntime without code changes
-2. **Performance**: SingleThreadedAgentRuntime has zero serialization/network overhead
-3. **Scalability**: GrpcWorkerAgentRuntime enables horizontal scaling across multiple processes/containers
-4. **Testability**: Built-in testing support with runtime mocking
-5. **Configuration-Driven**: Switch runtimes via environment variables
-6. **Type-Safe Messaging**: Pydantic models ensure message validation
-7. **Message Routing**: Automatic routing to handlers based on message type
-8. **Lifecycle Management**: Runtime manages agent creation, destruction, and state
-9. **Cross-Language Support**: gRPC enables polyglot agent systems (Python, .NET, etc.)
-10. **Production-Ready**: Built by Microsoft, used in AutoGen ecosystem
-
-**When to Use Each Runtime:**
-
-| Runtime | Use Case | Performance | Complexity | Scalability |
-|---------|----------|-------------|------------|-------------|
-| **SingleThreadedAgentRuntime** | Single-process deployment, development, testing | Highest (no network) | Lowest | Vertical only |
-| **GrpcWorkerAgentRuntime** | Distributed deployment, microservices, horizontal scaling | Lower (gRPC overhead) | Higher | Horizontal |
-
-**Migration Path:**
-
-1. **Start**: SingleThreadedAgentRuntime for MVP and development
-2. **Scale**: Switch to GrpcWorkerAgentRuntime when scaling horizontally
-3. **Hybrid**: Use multiple workers with different agent types for load distribution
-
-### 4. Knowledge Retriever Agent
-
-**Responsibility**: Execute multi-strategy retrieval (embedding, metadata, heuristic) and merge results using pluggable vector store adapter.
-
-**Interface**:
-```python
-class KnowledgeRetrieverAgent:
+class UnstructuredExpert:
     def __init__(self, vector_store: VectorStoreAdapter):
         self.vector_store = vector_store
-    
-    async def retrieve(self, query: str, intent: IntentResult) -> List[Document]:
-        """Execute multi-strategy retrieval"""
-        
-    async def semantic_search(self, query: str) -> List[Document]:
-        """Embedding-based semantic search via adapter"""
-        embedding = await self.generate_embedding(query)
-        return await self.vector_store.search(embedding, top_k=10)
-        
-    async def hybrid_search(self, query: str) -> List[Document]:
-        """Hybrid search combining semantic and keyword"""
-        embedding = await self.generate_embedding(query)
-        return await self.vector_store.hybrid_search(
-            query_embedding=embedding,
-            query_text=query,
-            top_k=10,
-            alpha=0.7  # Favor semantic over keyword
+
+    async def execute(self, payload: RetrievalPayload) -> RetrievalResult:
+        """Execute vector search"""
+        results = await self.vector_store.search(
+            query_embedding=payload.query_embedding,
+            filters=payload.filters
         )
-        
-    async def metadata_filter(self, constraints: Dict) -> List[Document]:
-        """Structured filtering via adapter with filters"""
-        # Use empty embedding for metadata-only search
-        return await self.vector_store.search(
-            query_embedding=[0.0] * 1536,
-            top_k=100,
-            filters=constraints
+        return RetrievalResult(
+            source_agent="unstructured_expert",
+            data=results,
+            meta={"doc_count": len(results), "top_score": results[0].score if results else 0}
         )
-        
-    async def guided_grep(self, pattern: str) -> List[Document]:
-        """Heuristic pattern matching"""
-        
-    async def rerank(self, candidates: List[Document]) -> List[Document]:
-        """Optional reranking with Cohere or LLM-as-a-Judge"""
 ```
 
-**Usage Example:**
+**Execution Pattern:**
+- Agents execute in parallel using `asyncio.TaskGroup`
+- Each returns `RetrievalResult` with structured data
+- Individual failures don't block other agents
+- Timeout handling: 5000ms default per agent
 
+### 3.5. Generator Agent (The Synthesizer)
+
+**Pattern:** `Chain-of-Thought` (CoT)
+**Responsibility:** Compose final answer with citations and provenance.
+
+**Interface:**
 ```python
-# Initialize from config
-vector_store = VectorStoreFactory.from_env()
-await vector_store.connect()
-
-# Create retriever agent
-retriever = KnowledgeRetrieverAgent(vector_store=vector_store)
-
-# Use retriever
-documents = await retriever.hybrid_search("What is RAG?")
-
-# Easy switching: just change environment variable
-# VECTOR_STORE_PROVIDER=weaviate
-# No code changes needed!
-```
-
-**Benefits of Adapter Pattern:**
-
-1. **Easy Switching**: Change vector store via configuration, no code changes
-2. **Consistent Interface**: All agents use same interface regardless of backend
-3. **Testability**: Mock adapter for unit tests
-4. **Extensibility**: Add new vector stores by implementing adapter interface
-5. **Hybrid Search**: Unified interface for semantic + keyword search
-6. **Production Ready**: Start with pgvector, scale to Weaviate when needed
-
-**Output**:
-```python
-@dataclass
-class Document:
-    content: str
-    source: str
-    timestamp: datetime
-    confidence: float
-    metadata: Dict[str, Any]
-    lob: str  # Line of Business
-```
-
-### 4. Answer Generator Agent (Chain-of-Thought)
-
-**Responsibility**: Synthesize answers from retrieved documents using Chain-of-Thought reasoning for grounded generation.
-
-**Pattern**: Chain-of-Thought (CoT) - Structured reasoning in a single pass, no tool use needed.
-
-**Interface**:
-```python
-class AnswerGeneratorAgent:
-    """Uses Chain-of-Thought prompting for structured answer generation"""
-    
-    def __init__(self, llm_client: LLMClient, prompt_optimizer: AgentLightningOptimizer):
-        self.llm = llm_client
-        self.prompt_optimizer = prompt_optimizer
-    
-    async def generate(
+class GeneratorAgent:
+    async def synthesize(
         self,
         query: str,
-        documents: List[Document],
-        intent: IntentResult
+        results: List[RetrievalResult],
+        context: IntentContext
     ) -> Answer:
-        """
-        Generate answer using Chain-of-Thought reasoning
-        
-        CoT Structure:
-        1. Identify key information from documents
-        2. Determine what information answers the query
-        3. Synthesize answer with proper grounding
-        4. Add citations and confidence assessment
-        """
-        # Select appropriate model based on complexity
-        model = self.select_model(intent.abstract_intent.complexity)
-        
-        # Assemble context with provenance
-        context = await self.assemble_context(documents)
-        
-        # Get optimized CoT prompt from Agent Lightning
-        cot_prompt = await self.prompt_optimizer.get_optimized_prompt(
-            task_type="answer_generation_cot",
-            context=context
-        )
-        
-        # Generate answer with CoT reasoning
-        answer = await self.llm.generate(
-            prompt=cot_prompt,
-            query=query,
-            context=context,
-            model=model,
-            temperature=0.3,  # Lower for more grounded responses
-            include_reasoning=True  # Return CoT steps
-        )
-        
-        # Extract citations from reasoning steps
-        citations = self.extract_citations(answer.reasoning_steps, documents)
-        
-        return Answer(
-            text=answer.text,
-            sources=[doc.source for doc in documents],
-            confidence=self.estimate_confidence(answer.reasoning_steps),
-            model_used=model,
-            generation_time_ms=answer.generation_time_ms,
-            provenance={
-                "reasoning_steps": answer.reasoning_steps,
-                "citations": citations,
-                "context_used": len(documents)
-            }
-        )
-    
-    def select_model(self, complexity: TaskComplexity) -> str:
-        """
-        Choose appropriate LLM based on task complexity
-        
-        Simple: GPT-4o-mini (fast, cost-effective)
-        Moderate: GPT-4 (balanced)
-        Complex: o1-preview (advanced reasoning)
-        """
-        if complexity == TaskComplexity.SIMPLE:
-            return "gpt-4o-mini"
-        elif complexity == TaskComplexity.MODERATE:
-            return "gpt-4"
-        else:
-            return "o1-preview"
-    
-    async def assemble_context(self, documents: List[Document]) -> Context:
-        """
-        Assemble context with provenance metadata
-        
-        Includes:
-        - Document content
-        - Source attribution
-        - Confidence scores
-        - Timestamps for freshness
-        """
-        return Context(
-            documents=documents,
-            total_tokens=sum(len(doc.content.split()) for doc in documents),
-            sources=[doc.source for doc in documents],
-            confidence_scores=[doc.confidence for doc in documents],
-            timestamps=[doc.timestamp for doc in documents]
-        )
-    
-    def extract_citations(
-        self,
-        reasoning_steps: List[str],
-        documents: List[Document]
-    ) -> List[Citation]:
-        """Extract citations from CoT reasoning steps"""
-        citations = []
-        for step in reasoning_steps:
-            # Parse citations from reasoning (e.g., "[Source: Doc 1]")
-            # Implementation details...
-            pass
-        return citations
-    
-    def estimate_confidence(self, reasoning_steps: List[str]) -> float:
-        """
-        Estimate confidence based on CoT reasoning quality
-        
-        Factors:
-        - Number of supporting documents cited
-        - Consistency across reasoning steps
-        - Presence of hedging language
-        """
-        # Implementation details...
-        return 0.85
+        """Generate grounded answer with structured reasoning"""
+
+    async def assemble_context(self, results: List[RetrievalResult]) -> Context:
+        """Merge results from multiple experts with provenance"""
+
+    def extract_citations(self, reasoning_steps: List[str], results: List[RetrievalResult]) -> List[Citation]:
+        """Create inline citations from reasoning"""
 ```
 
-**CoT Prompt Template Example**:
-```
-Given the user query and retrieved documents, generate a grounded answer following these steps:
+**CoT Structure:**
+1. **Identify Key Information:** Extract relevant facts from each result source
+2. **Determine Relevance:** Match information to query requirements
+3. **Synthesize Answer:** Combine with clear source attribution
+4. **Add Citations:** Format: `[Source: Structured DB, confidence: 0.92]`
 
-Step 1: Identify Key Information
-Review each document and extract information relevant to the query.
-- Document 1: [key points]
-- Document 2: [key points]
-- Document 3: [key points]
+**Provenance Fields:**
+- `sources`: List of source identifiers
+- `confidence`: Overall confidence score
+- `reasoning_steps`: Chain-of-thought trace
+- `citations`: Inline citations with source IDs
+- `generation_time_ms`: Performance metric
 
-Step 2: Determine Relevance
-Identify which information directly answers the query.
-- Most relevant: [information]
-- Supporting context: [information]
-- Not relevant: [information]
+### 3.6. Evaluator Agent (Quality Assessment)
 
-Step 3: Synthesize Answer
-Combine relevant information into a coherent answer.
-- Main point: [answer with citation]
-- Supporting details: [details with citations]
-- Caveats: [any limitations or uncertainties]
+**Pattern:** `Chain-of-Thought` (CoT)
+**Responsibility:** Assess answer quality using 7 RAG characteristics.
 
-Step 4: Add Citations and Assess Confidence
-Ensure all claims are backed by retrieved documents.
-- Citations: [list of sources used]
-- Confidence: [high/medium/low based on evidence quality]
-
-Final Answer: [Generated answer with inline citations]
-```
-
-**Output**:
-```python
-@dataclass
-class Answer:
-    text: str
-    sources: List[str]
-    confidence: float
-    model_used: str
-    generation_time_ms: int
-    provenance: Dict[str, Any]  # Includes reasoning_steps, citations
-```
-
-**Why CoT for Answer Generator?**
-- **Text generation task**: Producing natural language, not taking actions
-- **Structured reasoning**: Explicit steps ensure grounding in documents
-- **Single-pass**: No need for iterative tool use
-- **Explainable**: Reasoning steps provide transparency
-- **Grounded**: Citations tied to specific reasoning steps
-
-### 5. Evaluator Agent (Chain-of-Thought)
-
-**Responsibility**: Assess answer quality using 7 RAG characteristics (faithfulness, relevance, correctness, coverage, consistency, freshness, traceability).
-
-**Pattern**: Chain-of-Thought (CoT) - Structured analytical reasoning, no tool use needed.
-
-**Interface**:
+**Interface:**
 ```python
 class EvaluatorAgent:
-    """Uses Chain-of-Thought prompting for structured quality evaluation"""
-    
-    def __init__(self, llm_client: LLMClient, ragas_evaluator: RAGASEvaluator):
-        self.llm = llm_client
-        self.ragas = ragas_evaluator
-    
     async def evaluate(
         self,
         query: str,
-        documents: List[Document],
+        context: List[RetrievalResult],
         answer: Answer
     ) -> EvaluationResult:
-        """
-        Comprehensive quality evaluation using Chain-of-Thought
-        
-        CoT Structure:
-        1. Check Faithfulness (grounding in documents)
-        2. Check Relevance (addresses query)
-        3. Check Correctness (factual accuracy)
-        4. Check Coverage (completeness)
-        5. Check Consistency (internal coherence)
-        6. Check Freshness (recency)
-        7. Check Traceability (source attribution)
-        8. Overall assessment and decision
-        """
-        # Use CoT prompt for structured evaluation
-        cot_prompt = self.build_evaluation_cot_prompt(query, documents, answer)
-        
-        evaluation_reasoning = await self.llm.generate(
-            prompt=cot_prompt,
-            temperature=0.1,  # Very low for consistent evaluation
-            model="gpt-4"
-        )
-        
-        # Parse scores from CoT reasoning
-        scores = self.parse_scores_from_reasoning(evaluation_reasoning)
-        
-        # Also run RAGAS metrics for validation
-        ragas_scores = await self.ragas.evaluate(query, documents, answer)
-        
-        # Combine CoT and RAGAS scores
-        final_scores = self.combine_scores(scores, ragas_scores)
-        
-        # Determine if human review needed
-        overall_score = self.calculate_overall_score(final_scores)
-        needs_review = overall_score < 0.80  # Threshold
-        review_reasons = self.identify_review_reasons(final_scores) if needs_review else []
-        
-        return EvaluationResult(
-            faithfulness=final_scores["faithfulness"],
-            relevance=final_scores["relevance"],
-            correctness=final_scores["correctness"],
-            coverage=final_scores["coverage"],
-            consistency=final_scores["consistency"],
-            freshness=final_scores["freshness"],
-            traceability=final_scores["traceability"],
-            overall_score=overall_score,
-            needs_review=needs_review,
-            review_reasons=review_reasons,
-            reasoning_steps=evaluation_reasoning.steps
-        )
-    
-    def build_evaluation_cot_prompt(
-        self,
-        query: str,
-        documents: List[Document],
-        answer: Answer
-    ) -> str:
-        """Build CoT prompt for evaluation"""
-        return f"""
-        Evaluate the answer quality following these steps:
-        
-        Query: {query}
-        Answer: {answer.text}
-        Documents: {[doc.content for doc in documents]}
-        
-        Step 1: Check Faithfulness
-        - Examine each claim in the answer
-        - Verify if it's supported by the documents
-        - Score: 0.0 (not faithful) to 1.0 (fully faithful)
-        
-        Step 2: Check Relevance
-        - Does the answer address the query?
-        - Is it on-topic and useful?
-        - Score: 0.0 (irrelevant) to 1.0 (highly relevant)
-        
-        Step 3: Check Correctness
-        - Are the facts accurate?
-        - Any contradictions with documents?
-        - Score: 0.0 (incorrect) to 1.0 (correct)
-        
-        Step 4: Check Coverage
-        - Does it cover all query aspects?
-        - Any important information missing?
-        - Score: 0.0 (incomplete) to 1.0 (comprehensive)
-        
-        Step 5: Check Consistency
-        - Is the answer internally consistent?
-        - Any contradictions within the answer?
-        - Score: 0.0 (inconsistent) to 1.0 (consistent)
-        
-        Step 6: Check Freshness
-        - How recent is the information?
-        - Are documents up-to-date?
-        - Score: 0.0 (stale) to 1.0 (fresh)
-        
-        Step 7: Check Traceability
-        - Are sources properly cited?
-        - Can claims be traced to documents?
-        - Score: 0.0 (no citations) to 1.0 (fully cited)
-        
-        Step 8: Overall Assessment
-        - Calculate average score
-        - Determine if human review needed (threshold: 0.80)
-        - Provide reasoning for decision
-        
-        Provide scores and reasoning for each step.
-        """
-    
-    def parse_scores_from_reasoning(self, reasoning: Any) -> Dict[str, float]:
-        """Extract scores from CoT reasoning steps"""
-        # Implementation: Parse scores from structured reasoning
-        return {
-            "faithfulness": 0.95,
-            "relevance": 0.92,
-            "correctness": 0.98,
-            "coverage": 0.85,
-            "consistency": 0.90,
-            "freshness": 0.88,
-            "traceability": 0.93
-        }
-    
-    def combine_scores(
-        self,
-        cot_scores: Dict[str, float],
-        ragas_scores: Dict[str, float]
-    ) -> Dict[str, float]:
-        """Combine CoT and RAGAS scores with weighted average"""
-        combined = {}
-        for metric in cot_scores:
-            # Weight: 60% CoT (more explainable), 40% RAGAS (more rigorous)
-            combined[metric] = 0.6 * cot_scores[metric] + 0.4 * ragas_scores.get(metric, cot_scores[metric])
-        return combined
-    
+        """Comprehensive quality evaluation"""
+
     def calculate_overall_score(self, scores: Dict[str, float]) -> float:
-        """Calculate weighted overall score"""
-        weights = {
-            "faithfulness": 0.25,  # Most important
-            "relevance": 0.20,
-            "correctness": 0.20,
-            "coverage": 0.15,
-            "consistency": 0.10,
-            "freshness": 0.05,
-            "traceability": 0.05
-        }
-        return sum(scores[metric] * weights[metric] for metric in scores)
-    
-    def identify_review_reasons(self, scores: Dict[str, float]) -> List[str]:
-        """Identify which metrics failed threshold"""
-        reasons = []
-        threshold = 0.80
-        for metric, score in scores.items():
-            if score < threshold:
-                reasons.append(f"{metric}: {score:.2f} < {threshold}")
-        return reasons
+        """Weighted average of all metrics"""
 ```
 
-**CoT Evaluation Prompt Example**:
-```
-Step 1: Check Faithfulness
-Claim: "Customer ABC123 has 5 orders"
-Evidence: Document 1 states "Customer ABC123: 5 orders"
-Assessment: Fully supported by evidence
-Score: 1.0
+**7 RAG Characteristics:**
+1. **Faithfulness:** Grounding in source documents (weight: 25%)
+2. **Relevance:** Addresses the query (weight: 20%)
+3. **Correctness:** Factual accuracy (weight: 20%)
+4. **Coverage:** Completeness of answer (weight: 15%)
+5. **Consistency:** Internal coherence (weight: 10%)
+6. **Freshness:** Recency of information (weight: 5%)
+7. **Traceability:** Source attribution quality (weight: 5%)
 
-Step 2: Check Relevance
-Query asks: "How many orders does customer ABC123 have?"
-Answer provides: Number of orders for ABC123
-Assessment: Directly addresses query
-Score: 0.95
+**Quality Gates:**
+- **High Quality (≥0.8):** Deliver directly to user
+- **Medium Quality (0.6-0.8):** Request human approval
+- **Low Quality (<0.6):** Route to human review with corrections
 
-[... continues for all 7 characteristics ...]
+---
 
-Step 8: Overall Assessment
-Average score: 0.92
-Threshold: 0.80
-Decision: Quality is good, no review needed
-Reasoning: All metrics above threshold, answer is well-grounded and relevant
-```
+## 4. Orchestration Implementation
 
-**Output**:
-```python
-@dataclass
-class EvaluationResult:
-    faithfulness: float
-    relevance: float
-    correctness: float
-    coverage: float
-    consistency: float
-    freshness: float
-    traceability: float
-    overall_score: float
-    needs_review: bool
-    review_reasons: List[str]
-    reasoning_steps: List[str]  # CoT steps for transparency
-```
-
-**Why CoT for Evaluator?**
-- **Analytical reasoning task**: Assessing quality, not taking actions
-- **Multi-metric evaluation**: Structured steps for each characteristic
-- **Single-pass**: No need for iterative tool use
-- **Explainable**: Reasoning shows why scores were assigned
-- **Consistent**: Low temperature ensures reproducible evaluations
-    consistency: float
-    freshness: float
-    traceability: float
-    overall_score: float
-    needs_review: bool
-
-
-### 6. Human Review Agent
-
-**Responsibility**: Present low-quality answers to human reviewers and capture feedback.
-
-**Interface**:
-```python
-class HumanReviewAgent:
-    async def request_review(self, answer: Answer, evaluation: EvaluationResult) -> ReviewRequest:
-        """Create review request with context"""
-        
-    async def present_to_reviewer(self, request: ReviewRequest) -> None:
-        """Display in review UI"""
-        
-    async def capture_feedback(self, review_id: str) -> ReviewFeedback:
-        """Capture reviewer decision and corrections"""
-        
-    async def store_feedback(self, feedback: ReviewFeedback) -> None:
-        """Store in LightningStore for optimization"""
-```
-
-
-**Output**:
-```python
-@dataclass
-class ReviewFeedback:
-    review_id: str
-    decision: Literal["approve", "reject"]
-    corrected_routing: Optional[str]
-    corrected_prompts: Optional[str]
-    feedback_text: str
-    category: Literal["routing", "answer_quality", "relevance"]
-    timestamp: datetime
-```
-
-### 7. Parlant Behavioral Guidelines Layer
-
-**Responsibility**: Ensure reliable agent behavior through contextually-matched guidelines with explainability. Implements Six Thinking Hats patterns across all RAG pipeline phases.
-
-**Core Capabilities**:
-1. **Behavioral Guidelines**: Natural language rules that are reliably enforced
-2. **Journeys**: Structured progression through Double Diamond phases
-3. **Canned Responses**: Eliminate hallucinations in critical scenarios
-4. **Domain Adaptation**: Glossary terms and context variables
-5. **Guardrails**: Quality thresholds and risk assessment gates
-
-**Interface**:
-```python
-class ParlantRouter:
-    async def route(self, query: str, intent: IntentResult) -> RoutingDecision:
-        """Apply guidelines in priority order with Six Thinking Hats"""
-        
-    async def match_guideline(self, query: str, guideline: Guideline) -> bool:
-        """Check if guideline condition matches"""
-        
-    async def apply_thinking_hat(self, hat: ThinkingHat, context: Dict) -> Any:
-        """Apply specific thinking hat pattern (Green, White, Red, Black, Yellow, Blue)"""
-        
-    async def log_decision(self, decision: RoutingDecision) -> None:
-        """Log to Langfuse for observability with guideline provenance"""
-        
-    async def update_guidelines(self, optimized: List[Guideline]) -> None:
-        """Deploy updated guidelines from Agent Lightning"""
-        
-    async def create_journey_step(self, name: str, criteria: str) -> None:
-        """Define journey step with success criteria"""
-        
-    async def create_canned_response(self, condition: str, response: str) -> None:
-        """Create canned response for specific conditions"""
-```
-
-**Guideline Structure**:
-```python
-@dataclass
-class Guideline:
-    name: str
-    condition: str  # Natural language condition
-    action: str  # Natural language action
-    tools: List[str]  # Tools to use
-    priority: int  # Execution priority
-    thinking_hat: ThinkingHat  # Which hat this guideline represents
-    phase: DesignPhase  # Discover, Define, Develop, or Deliver
-```
-
-**Output**:
-```python
-@dataclass
-class RoutingDecision:
-    retriever: str
-    guideline_matched: str
-    confidence: float
-    reasoning: str
-    thinking_hat_used: ThinkingHat
-    phase: DesignPhase
-    explainability: Dict[str, Any]  # Why this guideline was matched
-```
-
-**Example Guidelines by Phase**:
-
-```python
-# Discover Phase (Green Hat)
-await agent.create_guideline(
-    condition="User query is ambiguous or has multiple interpretations",
-    action="Generate at least 3 diverse interpretations using Green Hat thinking",
-    tools=[generate_interpretations, retrieve_evidence],
-    thinking_hat=ThinkingHat.GREEN,
-    phase=DesignPhase.DISCOVER
-)
-
-# Define Phase (Black Hat)
-await agent.create_guideline(
-    condition="Validating interpretation confidence",
-    action="Apply Black Hat critical thinking: check factual grounding, identify risks",
-    tools=[validate_interpretation, assess_risks],
-    thinking_hat=ThinkingHat.BLACK,
-    phase=DesignPhase.DEFINE
-)
-
-# Develop Phase (Yellow Hat)
-await agent.create_guideline(
-    condition="Evaluating retrieval strategy performance",
-    action="Score strategies using Yellow Hat optimism: identify benefits of each",
-    tools=[evaluate_benefits, score_strategies],
-    thinking_hat=ThinkingHat.YELLOW,
-    phase=DesignPhase.DEVELOP
-)
-
-# Deliver Phase (Blue Hat)
-await agent.create_guideline(
-    condition="Answer quality score is 0.8 or above",
-    action="Use Blue Hat orchestration to deliver answer with citations",
-    tools=[format_answer, add_citations, deliver_to_user],
-    thinking_hat=ThinkingHat.BLUE,
-    phase=DesignPhase.DELIVER
-)
-```
-
-### 8. Agent Lightning Optimizer
-
-**Responsibility**: Optimize prompts and routing policies using reinforcement learning and human feedback.
-
-**Interface**:
-```python
-class AgentLightningOptimizer:
-    async def analyze_feedback(self, traces: List[Trace]) -> PatternAnalysis:
-        """Identify patterns in human corrections"""
-        
-    async def optimize_prompts(self, analysis: PatternAnalysis) -> List[PromptTemplate]:
-        """Generate improved prompt templates"""
-        
-    async def optimize_routing(self, analysis: PatternAnalysis) -> List[Guideline]:
-        """Update routing guidelines"""
-        
-    async def run_ab_test(self, old_policy: Policy, new_policy: Policy) -> ABTestResult:
-        """Compare policies with statistical significance"""
-        
-    async def promote_to_production(self, policy: Policy) -> None:
-        """Deploy validated improvements"""
-```
-
-## Data Models
-
-### Core Data Structures
-
-All data models use Pydantic for validation and serialization, compatible with Microsoft Agent Framework and FastAPI.
+### 4.1. Data Contracts (Pydantic Models)
 
 ```python
 from pydantic import BaseModel, Field
-from typing import List, Dict, Any, Optional, Literal
-from datetime import datetime
-from enum import Enum
+from typing import Literal, List, Optional, Any, Union
 from uuid import UUID, uuid4
+from datetime import datetime
 
-# Enumerations
+class CanonicalEntity(BaseModel):
+    """Grounded entity with unique identifier"""
+    id: str
+    name: str
+    type: str
+    confidence: float = Field(ge=0.0, le=1.0)
+    source: str  # Mapper MCP source
 
-class QueryType(str, Enum):
-    """Types of queries the system can handle"""
-    SQL_GENERATION = "sql_generation"
-    DATA_STORY = "data_story"
-    GENERAL_QA = "general_qa"
-    VISUALIZATION = "visualization"
-    MULTI_STEP = "multi_step"
+class IntentContext(BaseModel):
+    """Output from Parser, Input to Planner"""
+    trace_id: UUID = Field(default_factory=uuid4)
+    intent_type: Literal["lookup", "aggregation", "comparison", "sql_generation", "data_story"]
+    entities: List[CanonicalEntity]
+    unresolved_slots: List[str] = Field(default_factory=list)
+    raw_query: str
+    confidence_score: float = Field(ge=0.0, le=1.0)
+    policy_flags: List[str] = Field(default_factory=list)
+    requires_clarification: bool = False
 
-class TaskComplexity(str, Enum):
-    """Complexity levels for model selection"""
-    SIMPLE = "simple"  # GPT-4o-mini
-    MODERATE = "moderate"  # GPT-4
-    COMPLEX = "complex"  # o1-preview
+class ExecutionPlan(BaseModel):
+    """One-Pass workflow plan"""
+    plan_id: UUID = Field(default_factory=uuid4)
+    workflow_type: Literal["one_pass", "two_pass"] = "one_pass"
+    target_translators: List[str]  # Which experts to engage
+    query_criteria: Dict[str, Any]
+    estimated_complexity: Literal["simple", "moderate", "complex"]
 
-class LOB(str, Enum):
-    """Lines of Business for data sources"""
-    INVENTORY = "inventory"
-    ORDERS = "orders"
-    SUPPORT = "support"
-    FINANCE = "finance"
-    GENERAL = "general"
+class ClarificationRequest(BaseModel):
+    """Two-Pass workflow request"""
+    request_id: UUID = Field(default_factory=uuid4)
+    missing_slots: List[str]
+    clarification_options: Dict[str, List[str]]  # slot -> options
+    rationale: str
+    suggested_questions: List[str]
 
-class RetrievalStrategy(str, Enum):
-    """Retrieval strategies for knowledge retrieval"""
-    SEMANTIC = "semantic"  # Embedding-based
-    METADATA = "metadata"  # Structured filtering
-    HEURISTIC = "heuristic"  # Pattern matching
-    HYBRID = "hybrid"  # Multiple strategies
-
-class RoutingDecisionType(str, Enum):
-    """Types of routing decisions"""
-    NORMAL = "normal"
-    FALLBACK = "fallback"
-    HUMAN_REVIEW = "human_review"
-    CLARIFICATION_NEEDED = "clarification_needed"
-
-class ThinkingHat(str, Enum):
-    """Six Thinking Hats for design thinking"""
-    WHITE = "white"  # Facts, data, information
-    RED = "red"  # Emotions, feelings, intuition
-    BLACK = "black"  # Caution, risks, critical judgment
-    YELLOW = "yellow"  # Benefits, optimism, positive thinking
-    GREEN = "green"  # Creativity, alternatives, new ideas
-    BLUE = "blue"  # Process control, meta-thinking, orchestration
-
-class DesignPhase(str, Enum):
-    """Double Diamond Design Process phases"""
-    DISCOVER = "discover"  # Diverge: Explore problem space
-    DEFINE = "define"  # Converge: Synthesize insights
-    DEVELOP = "develop"  # Diverge: Generate solutions
-    DELIVER = "deliver"  # Converge: Test and deliver
-
-# Query and Intent Models
-
-class Query(BaseModel):
-    """User query with metadata"""
-    id: UUID = Field(default_factory=uuid4)
-    text: str = Field(..., description="User's natural language query")
-    user_id: str = Field(..., description="User identifier")
-    timestamp: datetime = Field(default_factory=datetime.now)
-    metadata: Dict[str, Any] = Field(default_factory=dict)
-    conversation_id: Optional[UUID] = None
-
-class ConversationContext(BaseModel):
-    """Context from previous conversation turns"""
-    conversation_id: UUID
-    previous_queries: List[str] = Field(default_factory=list)
-    previous_intents: List[str] = Field(default_factory=list)
-    entity_history: Dict[str, Any] = Field(default_factory=dict)
-    temporal_context: datetime = Field(default_factory=datetime.now)
-    user_preferences: Dict[str, Any] = Field(default_factory=dict)
-
-class AbstractIntent(BaseModel):
-    """High-level query pattern before detailed parsing"""
-    pattern: str = Field(..., description="Query pattern (e.g., 'temporal_data_retrieval')")
-    complexity: TaskComplexity
-    requires_multi_step: bool
-    estimated_sub_intents: int
-
-class SubIntent(BaseModel):
-    """Individual step in multi-step query plan"""
-    step_number: int
-    intent: str
-    entities: Dict[str, Any] = Field(default_factory=dict)
-    dependencies: List[int] = Field(default_factory=list)
-    optional: bool = False
-
-class EntityExtractionResult(BaseModel):
-    """Entity extraction with required/optional classification"""
-    required_entities: Dict[str, Any] = Field(default_factory=dict)
-    optional_entities: Dict[str, Any] = Field(default_factory=dict)
-    missing_required: List[str] = Field(default_factory=list)
-    entity_confidence: Dict[str, float] = Field(default_factory=dict)
-
-class ConfidenceScore(BaseModel):
-    """Multi-dimensional confidence with uncertainty quantification"""
-    intent_confidence: float = Field(..., ge=0.0, le=1.0)
-    entity_confidence: float = Field(..., ge=0.0, le=1.0)
-    completeness_confidence: float = Field(..., ge=0.0, le=1.0)
-    ambiguity_score: float = Field(..., ge=0.0, le=1.0)
-    context_confidence: float = Field(..., ge=0.0, le=1.0)
-    overall_confidence: float = Field(..., ge=0.0, le=1.0)
-    uncertainty: float = Field(..., ge=0.0, le=1.0)
-
-class FallbackStrategy(BaseModel):
-    """Strategy for handling low-confidence or incomplete parses"""
-    strategy_type: Literal[
-        "request_entities",
-        "disambiguate",
-        "confirm_interpretation",
-        "suggest_rephrase",
-        "route_to_human",
-        "none"
-    ]
-    clarification_questions: List[str] = Field(default_factory=list)
-    suggested_alternatives: List[str] = Field(default_factory=list)
-    can_proceed_with_defaults: bool = False
-
-class IntentResult(BaseModel):
-    """Complete intent parsing result with all advanced features"""
-    # Core intent
-    intent: str
-    query_type: QueryType
-    
-    # Multi-step planning
-    abstract_intent: AbstractIntent
-    sub_intents: List[SubIntent] = Field(default_factory=list)
-    execution_plan: List[int] = Field(default_factory=list)
-    
-    # Entity extraction
-    entities: Dict[str, Any] = Field(default_factory=dict)
-    required_entities: Dict[str, Any] = Field(default_factory=dict)
-    optional_entities: Dict[str, Any] = Field(default_factory=dict)
-    missing_required: List[str] = Field(default_factory=list)
-    
-    # Confidence and ambiguity
-    confidence: ConfidenceScore
-    ambiguity_score: float = Field(..., ge=0.0, le=1.0)
-    
-    # Fallback and recovery
-    requires_clarification: bool
-    fallback_strategy: Optional[FallbackStrategy] = None
-    
-    # Context tracking
-    resolved_from_context: Dict[str, Any] = Field(default_factory=dict)
-    conversation_context: ConversationContext
-
-# Retrieval Models
-
-class Document(BaseModel):
-    """Retrieved document with metadata and provenance"""
-    id: UUID = Field(default_factory=uuid4)
-    content: str = Field(..., description="Document content")
-    source: str = Field(..., description="Source identifier")
-    timestamp: datetime = Field(default_factory=datetime.now)
-    confidence: float = Field(..., ge=0.0, le=1.0)
-    metadata: Dict[str, Any] = Field(default_factory=dict)
-    lob: LOB
-    embedding: Optional[List[float]] = None
-    chunk_index: Optional[int] = None
-    parent_document_id: Optional[UUID] = None
+class RetrievalPayload(BaseModel):
+    """Output from Translator, Input to Experts"""
+    task_id: UUID = Field(default_factory=uuid4)
+    target_retriever: Literal["structured", "vector", "graph", "api"]
+    executable_query: str  # SQL, Cypher, or JSON filter
+    query_dialect: str     # postgres, cypher, graphql
+    explanation: str
+    timeout_ms: int = 5000
 
 class RetrievalResult(BaseModel):
-    """Result from knowledge retrieval"""
-    documents: List[Document]
-    strategy_used: RetrievalStrategy
-    total_candidates: int
-    reranked: bool
-    retrieval_time_ms: int
-
-# Answer Generation Models
+    """Output from Experts"""
+    source_agent: str
+    data: List[Any]
+    meta: Dict[str, Any] = Field(default_factory=dict)
+    execution_time_ms: int
+    success: bool = True
+    error_message: Optional[str] = None
 
 class Answer(BaseModel):
     """Generated answer with provenance"""
-    id: UUID = Field(default_factory=uuid4)
-    query_id: UUID
-    text: str = Field(..., description="Generated answer text")
+    answer_id: UUID = Field(default_factory=uuid4)
+    trace_id: UUID
+    query: str
+    text: str
     sources: List[str] = Field(default_factory=list)
-    confidence: float = Field(..., ge=0.0, le=1.0)
+    confidence: float = Field(ge=0.0, le=1.0)
     model_used: str
     generation_time_ms: int
     provenance: Dict[str, Any] = Field(default_factory=dict)
-    prompt_template_id: Optional[str] = None
-
-# Evaluation Models
+    citations: List[Dict[str, Any]] = Field(default_factory=list)
 
 class EvaluationResult(BaseModel):
-    """Comprehensive quality evaluation with 7 RAG characteristics"""
-    answer_id: UUID
-    query_id: UUID
-    
+    """Quality assessment output"""
+    evaluation_id: UUID = Field(default_factory=uuid4)
+    trace_id: UUID
+
     # 7 RAG Characteristics
-    faithfulness: float = Field(..., ge=0.0, le=1.0)
-    relevance: float = Field(..., ge=0.0, le=1.0)
-    correctness: float = Field(..., ge=0.0, le=1.0)
-    coverage: float = Field(..., ge=0.0, le=1.0)
-    consistency: float = Field(..., ge=0.0, le=1.0)
-    freshness: float = Field(..., ge=0.0, le=1.0)
-    traceability: float = Field(..., ge=0.0, le=1.0)
-    
-    # Overall assessment
-    overall_score: float = Field(..., ge=0.0, le=1.0)
-    needs_review: bool
+    faithfulness: float = Field(ge=0.0, le=1.0)
+    relevance: float = Field(ge=0.0, le=1.0)
+    correctness: float = Field(ge=0.0, le=1.0)
+    coverage: float = Field(ge=0.0, le=1.0)
+    consistency: float = Field(ge=0.0, le=1.0)
+    freshness: float = Field(ge=0.0, le=1.0)
+    traceability: float = Field(ge=0.0, le=1.0)
+
+    overall_score: float = Field(ge=0.0, le=1.0)
+    needs_review: bool = False
     review_reasons: List[str] = Field(default_factory=list)
-    evaluation_time_ms: int
-
-# Human Review Models
-
-class ReviewFeedback(BaseModel):
-    """Human reviewer feedback and corrections"""
-    review_id: UUID = Field(default_factory=uuid4)
-    answer_id: UUID
-    query_id: UUID
-    decision: Literal["approve", "reject"]
-    corrected_routing: Optional[str] = None
-    corrected_prompts: Optional[str] = None
-    corrected_answer: Optional[str] = None
-    feedback_text: str
-    category: Literal["routing", "answer_quality", "relevance", "other"]
-    reviewer_id: str
-    timestamp: datetime = Field(default_factory=datetime.now)
-    time_to_review_seconds: Optional[int] = None
-
-# Routing Models
-
-class RoutingDecision(BaseModel):
-    """Routing decision with explainability and design thinking context"""
-    retriever: str
-    guideline_matched: Optional[str] = None
-    confidence: float = Field(..., ge=0.0, le=1.0)
-    reasoning: str
-    decision_type: RoutingDecisionType
-    fallback_used: bool = False
-    thinking_hat_used: Optional[ThinkingHat] = None
-    phase: Optional[DesignPhase] = None
-    explainability: Dict[str, Any] = Field(default_factory=dict)
-
-# Tracing Models
-
-class Trace(BaseModel):
-    """Complete trace for observability"""
-    trace_id: UUID = Field(default_factory=uuid4)
-    query_id: UUID
-    user_id: str
-    
-    # Pipeline stages
-    intent_parsing_ms: Optional[int] = None
-    routing_decision: Optional[RoutingDecision] = None
-    routing_ms: Optional[int] = None
-    retrieval_strategy: Optional[RetrievalStrategy] = None
-    retrieval_ms: Optional[int] = None
-    documents_retrieved: int = 0
-    generation_ms: Optional[int] = None
-    evaluation_ms: Optional[int] = None
-    
-    # Results
-    answer_generated: bool
-    evaluation_scores: Optional[Dict[str, float]] = None
-    human_feedback: Optional[ReviewFeedback] = None
-    
-    # Metadata
-    timestamp: datetime = Field(default_factory=datetime.now)
-    total_time_ms: int
-    llm_tokens_used: int = 0
-    llm_cost_usd: float = 0.0
-
-# Agent Task Models
-
-class AgentTask(BaseModel):
-    """Task for agent execution"""
-    task_id: UUID = Field(default_factory=uuid4)
-    agent_name: str
-    task_type: str
-    input_data: Dict[str, Any]
-    dependencies: List[UUID] = Field(default_factory=list)
-    priority: int = 0
-    timeout_seconds: int = 30
-
-class AgentResult(BaseModel):
-    """Result from agent execution"""
-    task_id: UUID
-    agent_name: str
-    success: bool
-    output_data: Dict[str, Any] = Field(default_factory=dict)
-    error_message: Optional[str] = None
-    execution_time_ms: int
 ```
 
-### Database Schema
+### 4.2. Concurrent Execution Logic
 
-**PostgreSQL Tables with pgvector Extension**:
+The Translator uses `asyncio.TaskGroup` for parallel expert execution:
 
+```python
+import asyncio
+from typing import List
+
+class ConcurrentExecutor:
+    def __init__(self, retrievers: Dict[str, BaseRetriever]):
+        self.retrievers = retrievers
+
+    async def execute_concurrent(
+        self,
+        payloads: List[RetrievalPayload]
+    ) -> List[RetrievalResult]:
+        """
+        Execute multiple retrievers in parallel with proper error handling.
+        Uses Python 3.11+ TaskGroup for robust concurrency.
+        """
+        results: List[RetrievalResult] = []
+
+        try:
+            async with asyncio.TaskGroup() as tg:
+                tasks = []
+                for payload in payloads:
+                    retriever = self.retrievers.get(payload.target_retriever)
+                    if retriever:
+                        task = tg.create_task(
+                            retriever.execute(payload),
+                            name=f"retrieval-{payload.target_retriever}"
+                        )
+                        tasks.append(task)
+
+            # Collect results after all complete
+            results = [task.result() for task in tasks]
+
+        except* asyncio.TimeoutError as te:
+            # Handle timeout errors
+            print(f"Retrieval timeout: {te}")
+
+        except* Exception as eg:
+            # Handle other errors but continue
+            print(f"Partial retrieval failures: {eg}")
+            # Collect successful results
+            results = [t.result() for t in tasks if not t.exception()]
+
+        return results
+```
+
+### 4.3. Main Orchestration Workflow
+
+```python
+async def run_agentic_rag(
+    user_query: str,
+    session_id: str,
+    context: ConversationContext = None
+) -> Union[Answer, ClarificationRequest]:
+    """
+    Complete RAG pipeline with Parser as sole entry point.
+    Follows: Parse → [Clarify Loop] → Plan → Translate → Execute → Synthesize
+    """
+    # Initialize agents
+    parser = IntentParserAgent()
+    planner = PlannerAgent()
+    translator = TranslatorAgent()
+    executor = ConcurrentExecutor(retrievers)
+    generator = GeneratorAgent()
+    evaluator = EvaluatorAgent()
+
+    # === PHASE 1: PARSER TRIAGE & CLARIFICATION ===
+    # Parser handles all user interaction until intent is clear
+    intent_ctx = await parser.parse_intent(user_query, context)
+
+    # If ambiguity detected, return clarification request directly
+    if intent_ctx.requires_clarification:
+        return parser.create_clarification_request(intent_ctx)
+
+    # === PHASE 2: PLANNING & WORKFLOW ROUTING ===
+    # Parser hands off to Planner only after confidence gate passed
+    decision = await planner.create_execution_plan(intent_ctx)
+
+    # === PHASE 3: TRANSLATION (Schema-Aware) ===
+    # Uses MCP Schema Registry internally
+    payloads = await translator.formulate_queries(
+        decision,
+        intent_ctx
+    )
+
+    # === PHASE 4: EXECUTION (Parallel) ===
+    raw_results = await executor.execute_concurrent(payloads)
+
+    # === PHASE 5: GENERATION ===
+    answer = await generator.synthesize(
+        query=user_query,
+        results=raw_results,
+        context=intent_ctx
+    )
+
+    # === PHASE 6: EVALUATION & QUALITY GATES ===
+    evaluation = await evaluator.evaluate(
+        query=user_query,
+        context=raw_results,
+        answer=answer
+    )
+
+    # If quality below threshold, route through Parser for human review
+    if evaluation.needs_review:
+        return await parser.request_human_review(answer, evaluation)
+
+    # Direct delivery (Parser as exit point)
+    return answer
+```
+
+---
+
+## 5. Workflows in Detail
+
+### Workflow 1: One-Pass (Fast Path)
+
+*Ideal for:* "Show me Q3 revenue for Acme Corp" (clear intent, high confidence)
+
+**Sequence:**
+1. **User** → **Parser**: Submit query
+2. **Parser** analyzes query, grounds entities via Mapper MCP, calculates confidence
+3. **Parser** has high confidence (>0.7) and no unresolved slots
+4. **Parser** → **Planner**: Handoff with ExecutionPlan
+5. **Planner** policy check via Parlant passes
+6. **Planner** → **Translator**: Route finalized plan
+7. **Translator** generates queries using Schema Registry MCP
+8. **Experts** execute retrieval in parallel
+9. **Generator** synthesizes answer with citations
+10. **Evaluator** checks quality (≥0.8 score)
+11. **Eval** → **User**: Deliver answer directly
+
+**Timing:** ~2-3 seconds total
+
+**Key Point:** Parser is the sole entry point. No other agent receives direct user input.
+
+### Workflow 2: Two-Pass (Clarification Loop)
+
+*Ideal for:* "How much did we spend on the project?" (ambiguous: which project? which timeframe?)
+
+**First Pass:**
+1. **User** → **Parser**: Submit query
+2. **Parser** analyzes query, detects low confidence and missing slots
+3. **Parser** → **User**: Return ClarificationRequest with options
+4. **User** sees UI chips/guidance
+
+**Second Pass:**
+5. **User** provides clarification (selects "Project Alpha", "YTD")
+6. **User** → **Parser**: Submit updated query
+7. **Parser** re-analyzes with updated context
+8. **Parser** now has high confidence, creates ExecutionPlan
+9. **Parser** → **Planner**: Handoff for execution
+10. **Proceed** with remaining One-Pass workflow (steps 5-11 above)
+
+**Timing:** ~5-10 seconds total (including human input)
+
+**Key Point:** Parser manages the entire clarification loop. Planner only sees finalized intents.
+
+### Workflow 3: Human-in-the-Loop Quality Gate
+
+*Triggered by:* Quality score 0.6-0.8 or user preference for oversight
+
+**Flow:**
+1. Complete One-Pass workflow through Evaluator
+2. **Evaluator** calculates quality score (0.6-0.8)
+3. **Evaluator** → **Parser**: Route to Human Approval
+4. **Parser** → **User**: Present for review with context
+5. **Human Reviewer** sees:
+   - Generated answer
+   - Source documents
+   - Quality metrics (faithfulness, relevance, etc.)
+6. **Reviewer** can:
+   - Approve → deliver to user
+   - Reject → submit feedback to Parser
+7. **If Rejected:** Feedback goes to **Parser**, which incorporates it and re-generates
+8. **Feedback** stored in LightningStore for optimization
+
+**Key Point:** Parser remains the single entry/exit point for user interactions.
+
+---
+
+## 6. Middleware & Policy (Parlant)
+
+Parlant is integrated as **middleware decorators/hooks** to enforce compliance:
+
+### 6.1. Parlant Guard Implementation
+
+```python
+from functools import wraps
+from parlant.client import ParlantClient
+
+parlant = ParlantClient(url="http://parlant-service")
+
+def parlant_guard(policy_domain: str, action: str):
+    """Middleware to check policy before agent execution"""
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            # Extract context
+            context_data = kwargs.get('context') or args[0]
+
+            # Call Parlant policy engine
+            evaluation = await parlant.evaluate(
+                domain=policy_domain,
+                action=action,
+                context=context_data
+            )
+
+            # Enforce policy
+            if evaluation.status == "BLOCK":
+                raise PolicyViolationError(evaluation.reason)
+
+            if evaluation.status == "FLAG":
+                # Inject warning into context
+                if hasattr(context_data, 'warnings'):
+                    context_data.warnings.append(evaluation.reason)
+
+            if evaluation.status == "CLARIFY":
+                # Force clarification workflow
+                context_data.requires_clarification = True
+                context_data.clarification_prompt = evaluation.suggestion
+
+            # Proceed with execution
+            return await func(*args, **kwargs)
+        return wrapper
+    return decorator
+
+# Usage in Planner
+class PlannerAgent:
+    @parlant_guard(policy_domain="data_access", action="route_query")
+    async def decide(self, intent: IntentContext):
+        # Business logic here
+        pass
+```
+
+### 6.2. Policy Domains
+
+- **data_access:** Controls which data sources can be queried
+- **pii_protection:** Detects and masks personally identifiable information
+- **topic_restrictions:** Blocks restricted topics (e.g., HR data without permission)
+- **query_safety:** Validates SQL queries for safety (no DELETE/UPDATE)
+- **response_compliance:** Ensures generated answers follow guidelines
+
+---
+
+## 7. MCP Integration
+
+The **Model Context Protocol (MCP)** standardizes how agents access external knowledge:
+
+### 7.1. Mapper MCP (Parser)
+
+**Endpoint:** `POST /mcp/v1/tools/call`
+
+**Tool:** `resolve_entity`
+
+**Request:**
+```json
+{
+  "tool": "resolve_entity",
+  "arguments": {
+    "text": "Acme Corp",
+    "domain": "crm",
+    "entity_type": "customer"
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "id": "CUST-001",
+  "name": "Acme International",
+  "type": "customer",
+  "confidence": 0.98,
+  "source": "customer_database"
+}
+```
+
+### 7.2. Schema Registry MCP (Translator)
+
+**Endpoint:** `POST /mcp/v1/tools/call`
+
+**Tool:** `get_schema_context`
+
+**Request:**
+```json
+{
+  "tool": "get_schema_context",
+  "arguments": {
+    "intent_keywords": ["revenue", "Q3", "customer"],
+    "limit": 3
+  }
+}
+```
+
+**Response:**
 ```sql
--- Enable pgvector extension
-CREATE EXTENSION IF NOT EXISTS vector;
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
--- Queries table
-CREATE TABLE queries (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    text TEXT NOT NULL,
-    user_id TEXT NOT NULL,
-    conversation_id UUID,
-    metadata JSONB DEFAULT '{}',
-    created_at TIMESTAMP DEFAULT NOW()
+-- Schema for: fact_sales
+CREATE TABLE fact_sales (
+    sale_id BIGINT PRIMARY KEY,
+    cust_id VARCHAR(50) REFERENCES dim_customer(id),
+    amt DECIMAL(10,2) NOT NULL,
+    sale_date DATE NOT NULL,
+    quarter INT,
+    year INT
 );
 
-CREATE INDEX idx_queries_user_id ON queries(user_id);
-CREATE INDEX idx_queries_conversation_id ON queries(conversation_id);
-CREATE INDEX idx_queries_created_at ON queries(created_at DESC);
-
--- Conversation context table
-CREATE TABLE conversation_contexts (
-    conversation_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id TEXT NOT NULL,
-    previous_queries TEXT[] DEFAULT '{}',
-    previous_intents TEXT[] DEFAULT '{}',
-    entity_history JSONB DEFAULT '{}',
-    user_preferences JSONB DEFAULT '{}',
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
-);
-
-CREATE INDEX idx_conversation_contexts_user_id ON conversation_contexts(user_id);
-
--- Intent results table
-CREATE TABLE intent_results (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    query_id UUID NOT NULL REFERENCES queries(id),
-    intent TEXT NOT NULL,
-    query_type TEXT NOT NULL,
-    abstract_intent JSONB NOT NULL,
-    sub_intents JSONB DEFAULT '[]',
-    execution_plan INTEGER[] DEFAULT '{}',
-    entities JSONB DEFAULT '{}',
-    required_entities JSONB DEFAULT '{}',
-    optional_entities JSONB DEFAULT '{}',
-    missing_required TEXT[] DEFAULT '{}',
-    confidence JSONB NOT NULL,
-    ambiguity_score FLOAT NOT NULL,
-    requires_clarification BOOLEAN DEFAULT false,
-    fallback_strategy JSONB,
-    resolved_from_context JSONB DEFAULT '{}',
-    created_at TIMESTAMP DEFAULT NOW()
-);
-
-CREATE INDEX idx_intent_results_query_id ON intent_results(query_id);
-CREATE INDEX idx_intent_results_query_type ON intent_results(query_type);
-
--- Documents table with vector embeddings
-CREATE TABLE documents (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    content TEXT NOT NULL,
-    source TEXT NOT NULL,
-    lob TEXT NOT NULL,
-    confidence FLOAT NOT NULL CHECK (confidence >= 0 AND confidence <= 1),
-    metadata JSONB DEFAULT '{}',
-    embedding vector(1536),  -- OpenAI ada-002 dimension
-    chunk_index INTEGER,
-    parent_document_id UUID REFERENCES documents(id),
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
-);
-
-CREATE INDEX idx_documents_source ON documents(source);
-CREATE INDEX idx_documents_lob ON documents(lob);
-CREATE INDEX idx_documents_parent ON documents(parent_document_id);
-CREATE INDEX idx_documents_embedding ON documents USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
-
--- Answers table
-CREATE TABLE answers (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    query_id UUID NOT NULL REFERENCES queries(id),
-    text TEXT NOT NULL,
-    sources TEXT[] DEFAULT '{}',
-    confidence FLOAT NOT NULL CHECK (confidence >= 0 AND confidence <= 1),
-    model_used TEXT NOT NULL,
-    generation_time_ms INTEGER NOT NULL,
-    provenance JSONB DEFAULT '{}',
-    prompt_template_id TEXT,
-    created_at TIMESTAMP DEFAULT NOW()
-);
-
-CREATE INDEX idx_answers_query_id ON answers(query_id);
-CREATE INDEX idx_answers_model_used ON answers(model_used);
-CREATE INDEX idx_answers_created_at ON answers(created_at DESC);
-
--- Evaluation results table
-CREATE TABLE evaluation_results (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    answer_id UUID NOT NULL REFERENCES answers(id),
-    query_id UUID NOT NULL REFERENCES queries(id),
-    
-    -- 7 RAG Characteristics
-    faithfulness FLOAT NOT NULL CHECK (faithfulness >= 0 AND faithfulness <= 1),
-    relevance FLOAT NOT NULL CHECK (relevance >= 0 AND relevance <= 1),
-    correctness FLOAT NOT NULL CHECK (correctness >= 0 AND correctness <= 1),
-    coverage FLOAT NOT NULL CHECK (coverage >= 0 AND coverage <= 1),
-    consistency FLOAT NOT NULL CHECK (consistency >= 0 AND consistency <= 1),
-    freshness FLOAT NOT NULL CHECK (freshness >= 0 AND freshness <= 1),
-    traceability FLOAT NOT NULL CHECK (traceability >= 0 AND traceability <= 1),
-    
-    overall_score FLOAT NOT NULL CHECK (overall_score >= 0 AND overall_score <= 1),
-    needs_review BOOLEAN DEFAULT false,
-    review_reasons TEXT[] DEFAULT '{}',
-    evaluation_time_ms INTEGER NOT NULL,
-    created_at TIMESTAMP DEFAULT NOW()
-);
-
-CREATE INDEX idx_evaluation_results_answer_id ON evaluation_results(answer_id);
-CREATE INDEX idx_evaluation_results_query_id ON evaluation_results(query_id);
-CREATE INDEX idx_evaluation_results_needs_review ON evaluation_results(needs_review);
-CREATE INDEX idx_evaluation_results_overall_score ON evaluation_results(overall_score DESC);
-
--- Review feedback table
-CREATE TABLE review_feedback (
-    review_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    answer_id UUID NOT NULL REFERENCES answers(id),
-    query_id UUID NOT NULL REFERENCES queries(id),
-    decision TEXT NOT NULL CHECK (decision IN ('approve', 'reject')),
-    corrected_routing TEXT,
-    corrected_prompts TEXT,
-    corrected_answer TEXT,
-    feedback_text TEXT NOT NULL,
-    category TEXT NOT NULL CHECK (category IN ('routing', 'answer_quality', 'relevance', 'other')),
-    reviewer_id TEXT NOT NULL,
-    time_to_review_seconds INTEGER,
-    created_at TIMESTAMP DEFAULT NOW()
-);
-
-CREATE INDEX idx_review_feedback_answer_id ON review_feedback(answer_id);
-CREATE INDEX idx_review_feedback_query_id ON review_feedback(query_id);
-CREATE INDEX idx_review_feedback_decision ON review_feedback(decision);
-CREATE INDEX idx_review_feedback_category ON review_feedback(category);
-CREATE INDEX idx_review_feedback_reviewer_id ON review_feedback(reviewer_id);
-
--- Traces table for observability
-CREATE TABLE traces (
-    trace_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    query_id UUID NOT NULL REFERENCES queries(id),
-    user_id TEXT NOT NULL,
-    
-    -- Pipeline stage timings
-    intent_parsing_ms INTEGER,
-    routing_decision JSONB,
-    routing_ms INTEGER,
-    retrieval_strategy TEXT,
-    retrieval_ms INTEGER,
-    documents_retrieved INTEGER DEFAULT 0,
-    generation_ms INTEGER,
-    evaluation_ms INTEGER,
-    
-    -- Results
-    answer_generated BOOLEAN DEFAULT false,
-    evaluation_scores JSONB,
-    human_feedback_id UUID REFERENCES review_feedback(review_id),
-    
-    -- Metadata
-    total_time_ms INTEGER NOT NULL,
-    llm_tokens_used INTEGER DEFAULT 0,
-    llm_cost_usd FLOAT DEFAULT 0.0,
-    created_at TIMESTAMP DEFAULT NOW()
-);
-
-CREATE INDEX idx_traces_query_id ON traces(query_id);
-CREATE INDEX idx_traces_user_id ON traces(user_id);
-CREATE INDEX idx_traces_created_at ON traces(created_at DESC);
-CREATE INDEX idx_traces_total_time_ms ON traces(total_time_ms);
-
--- Routing decisions table
-CREATE TABLE routing_decisions (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    trace_id UUID NOT NULL REFERENCES traces(trace_id),
-    retriever TEXT NOT NULL,
-    guideline_matched TEXT,
-    confidence FLOAT NOT NULL CHECK (confidence >= 0 AND confidence <= 1),
-    reasoning TEXT NOT NULL,
-    decision_type TEXT NOT NULL CHECK (decision_type IN ('normal', 'fallback', 'human_review', 'clarification_needed')),
-    fallback_used BOOLEAN DEFAULT false,
-    created_at TIMESTAMP DEFAULT NOW()
-);
-
-CREATE INDEX idx_routing_decisions_trace_id ON routing_decisions(trace_id);
-CREATE INDEX idx_routing_decisions_decision_type ON routing_decisions(decision_type);
-
--- Agent tasks table
-CREATE TABLE agent_tasks (
-    task_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    agent_name TEXT NOT NULL,
-    task_type TEXT NOT NULL,
-    input_data JSONB NOT NULL,
-    dependencies UUID[] DEFAULT '{}',
-    priority INTEGER DEFAULT 0,
-    timeout_seconds INTEGER DEFAULT 30,
-    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'completed', 'failed')),
-    created_at TIMESTAMP DEFAULT NOW(),
-    started_at TIMESTAMP,
-    completed_at TIMESTAMP
-);
-
-CREATE INDEX idx_agent_tasks_agent_name ON agent_tasks(agent_name);
-CREATE INDEX idx_agent_tasks_status ON agent_tasks(status);
-CREATE INDEX idx_agent_tasks_created_at ON agent_tasks(created_at DESC);
-
--- Agent results table
-CREATE TABLE agent_results (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    task_id UUID NOT NULL REFERENCES agent_tasks(task_id),
-    agent_name TEXT NOT NULL,
-    success BOOLEAN NOT NULL,
-    output_data JSONB DEFAULT '{}',
-    error_message TEXT,
-    execution_time_ms INTEGER NOT NULL,
-    created_at TIMESTAMP DEFAULT NOW()
-);
-
-CREATE INDEX idx_agent_results_task_id ON agent_results(task_id);
-CREATE INDEX idx_agent_results_success ON agent_results(success);
-
--- Prompt templates table (for Agent Lightning)
-CREATE TABLE prompt_templates (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    template TEXT NOT NULL,
-    version INTEGER NOT NULL,
-    agent_name TEXT NOT NULL,
-    performance_metrics JSONB DEFAULT '{}',
-    is_active BOOLEAN DEFAULT true,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
-);
-
-CREATE INDEX idx_prompt_templates_agent_name ON prompt_templates(agent_name);
-CREATE INDEX idx_prompt_templates_is_active ON prompt_templates(is_active);
-
--- Guidelines table (for Parlant routing)
-CREATE TABLE guidelines (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name TEXT NOT NULL UNIQUE,
-    condition TEXT NOT NULL,
-    action TEXT NOT NULL,
-    priority INTEGER NOT NULL,
-    is_active BOOLEAN DEFAULT true,
-    performance_metrics JSONB DEFAULT '{}',
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
-);
-
-CREATE INDEX idx_guidelines_priority ON guidelines(priority);
-CREATE INDEX idx_guidelines_is_active ON guidelines(is_active);
-
-CREATE TABLE feedback_traces (
-    id UUID PRIMARY KEY,
-    query_id UUID NOT NULL,
-    query_text TEXT NOT NULL,
-    routing_decision TEXT,
-    retrieval_strategy TEXT,
-    answer_text TEXT,
-    evaluation_scores JSONB,
-    human_feedback JSONB,
-    created_at TIMESTAMP DEFAULT NOW()
-);
-
-CREATE INDEX ON feedback_traces (created_at DESC);
-CREATE INDEX ON feedback_traces ((human_feedback->>'decision'));
+-- Context: Contains quarterly revenue data by customer
+-- Indexes: btree on cust_id, btree on (year, quarter)
+-- Row count: 12,456,789
+-- Last updated: 2025-01-15
 ```
 
+### 7.3. Execution MCP (Experts)
 
-## Correctness Properties
+**Tools:**
+- `execute_sql(query: str, readonly: bool = true)`
+- `search_vectors(embedding: list, filters: dict, top_k: int)`
+- `execute_cypher(query: str)`
 
-*A property is a characteristic or behavior that should hold true across all valid executions of a system—essentially, a formal statement about what the system should do. Properties serve as the bridge between human-readable specifications and machine-verifiable correctness guarantees.*
+**Security:**
+- All queries run in read-only mode
+- Timeout enforced (5000ms)
+- Credentials isolated from Translator
+- Query logging for audit
 
-### Property 1: Orchestrator Task Decomposition
-*For any* user query, the Orchestrator Agent should decompose it into a sequence of agent-specific tasks that collectively address the query intent.
-**Validates: Requirements 1.1**
+---
 
-### Property 2: Agent Result Routing
-*For any* completed agent task, the system should route results to the next appropriate agent according to workflow dependencies.
-**Validates: Requirements 1.2**
+## 8. System Properties (Correctness Guarantees)
+
+### Property 1: Intent Parsing Completeness
+*For any* natural language query, the Parser Agent should return a structured IntentContext with extracted entities, confidence score, and unresolved slots.
+
+**Validates:** Requirements 2.1, 6.1
+
+### Property 2: Workflow Routing Determinism
+*For any* IntentContext, the Planner should deterministically route to either One-Pass or Two-Pass workflow based on confidence threshold and slot completeness.
+
+**Validates:** Requirements 1.2, 2.3
 
 ### Property 3: Parallel Execution Aggregation
-*For any* set of agents executing in parallel, the system should aggregate all results before proceeding to the next workflow stage.
-**Validates: Requirements 1.3**
-
-### Property 4: Failure Handling
-*For any* agent failure, the system should either retry the operation or escalate to Human Review based on failure type and retry count.
-**Validates: Requirements 1.4**
-
-### Property 5: Microsoft Agent Framework Runtime Configurability
-*For any* agent communication, the system should support both SingleThreadedAgentRuntime and GrpcWorkerAgentRuntime modes via configurable runtime.
-**Validates: Requirements 16.1, 16.2, 16.3**
-
-### Property 5a: Message Type Safety
-*For any* agent communication, messages should be transmitted with validated Pydantic/dataclass schemas via Microsoft Agent Framework.
-**Validates: Requirements 1.5**
-
-### Property 6: Intent Extraction Completeness
-*For any* natural language query, the Intent Parser should return intent, entities, and confidence score.
-**Validates: Requirements 2.1**
-
-### Property 7: Ambiguity Detection
-*For any* query with ambiguous intent, the system should request user clarification before proceeding with retrieval.
-**Validates: Requirements 2.2**
-
-### Property 8: Low Confidence Routing
-*For any* intent with confidence below threshold, the system should route to fallback handling or human review.
-**Validates: Requirements 2.3**
-
-### Property 9: SQL Intent Detection
-*For any* query requiring data analysis, the system should detect SQL-generation intent and route to SQLCoder.
-**Validates: Requirements 2.4**
-
-### Property 10: Data Story Event Emission
-*For any* query matching data story patterns, the system should emit a data story suggestion event.
-**Validates: Requirements 2.5**
-
-### Property 11: Semantic Search Execution
-*For any* retrieval operation, the Knowledge Retriever should execute embedding-based semantic search.
-**Validates: Requirements 3.1**
-
-### Property 12: Metadata Filtering Application
-*For any* query with structured constraints, the system should apply metadata filtering using ClickHouse schema.
-**Validates: Requirements 3.2**
-
-### Property 13: Pattern Matching Strategy
-*For any* query requiring exact pattern matching, the system should use guided grep for heuristic refinement.
-**Validates: Requirements 3.3**
-
-### Property 14: Result Deduplication
-*For any* set of retrieval results from multiple strategies, the system should merge and deduplicate candidate chunks.
-**Validates: Requirements 3.4**
-
-### Property 15: Optional Reranking
-*For any* merged candidate set, the system should support optional reranking using Cohere or LLM-as-a-Judge.
-**Validates: Requirements 3.5**
-
-### Property 16: Guideline Priority Ordering
-*For any* query evaluated by Parlant, guidelines should be applied in priority order with deterministic matching.
-**Validates: Requirements 4.1**
-
-### Property 17: Routing Decision Logging
-*For any* matched guideline, the system should log the guideline name and routing decision to Langfuse.
-**Validates: Requirements 4.2**
-
-### Property 18: Fallback Routing
-*For any* query with no matching guidelines, the system should route to a fallback retriever.
-**Validates: Requirements 4.3**
-
-### Property 19: Routing Traceability
-*For any* routing decision, the system should create a Langfuse trace with decision reasoning.
-**Validates: Requirements 4.4**
-
-### Property 20: Guideline Version Control
-*For any* guideline update, the system should version control changes and support A/B testing.
-**Validates: Requirements 4.5**
-
-### Property 21: Optimized Prompt Usage
-*For any* answer generation, the Answer Generator should use optimized prompts from Agent Lightning.
-**Validates: Requirements 5.1**
-
-### Property 22: Provenance Metadata Inclusion
-*For any* assembled context, the system should include source, timestamp, and confidence metadata.
-**Validates: Requirements 5.2**
-
-### Property 23: Adaptive Model Selection
-*For any* answer generation task, the system should select LLM model based on task complexity.
-**Validates: Requirements 5.3**
-
-### Property 24: Feedback-Driven Prompt Updates
-*For any* feedback received by Agent Lightning, the system should update prompt templates using reinforcement learning.
-**Validates: Requirements 5.4**
-
-### Property 25: Prompt Deployment
-*For any* optimized prompt template, the system should deploy updates to Parlant for production use.
-**Validates: Requirements 5.5**
-
-### Property 26: Faithfulness Scoring
-*For any* generated answer, the Evaluator Agent should compute a faithfulness score using RAGAS metrics.
-**Validates: Requirements 6.1**
-
-### Property 27: Comprehensive Quality Assessment
-*For any* answer evaluation, the system should assess all seven RAG characteristics (faithfulness, relevance, correctness, coverage, consistency, freshness, traceability).
-**Validates: Requirements 6.2**
-
-### Property 28: Quality-Based Review Routing
-*For any* answer with quality scores below threshold, the system should route to Human Review.
-**Validates: Requirements 6.3**
-
-### Property 29: High-Quality Answer Delivery
-*For any* answer with quality scores above threshold, the system should return the answer with confidence indicators.
-**Validates: Requirements 6.4**
-
-### Property 30: Evaluation Metrics Logging
-*For any* completed evaluation, the system should log all quality metrics to Langfuse.
-**Validates: Requirements 6.5**
-
-### Property 31: Review Request Presentation
-*For any* answer requiring review, the Human Review Agent should present answer, context, and quality scores.
-**Validates: Requirements 7.1**
-
-### Property 32: Approval Handling
-*For any* reviewer approval, the system should deliver the answer to the user and log the approval decision.
-**Validates: Requirements 7.2**
-
-### Property 33: Rejection Feedback Capture
-*For any* reviewer rejection, the system should capture corrected routing, prompts, and detailed feedback.
-**Validates: Requirements 7.3**
-
-### Property 34: Feedback Persistence
-*For any* captured human feedback, the system should store complete traces in LightningStore.
-**Validates: Requirements 7.4**
-
-### Property 35: Pattern-Based Policy Updates
-*For any* feedback processed by Agent Lightning, the system should identify patterns and update routing policies.
-**Validates: Requirements 7.5**
-
-### Property 36: Message Type Discrimination
-*For any* frontend message, the system should correctly discriminate between AI messages, direct UI updates, and database operations.
-**Validates: Requirements 8.1**
-
-### Property 37: SSE Streaming for AI Messages
-*For any* AI message processing, the system should stream events via Server-Sent Events (SSE).
-**Validates: Requirements 8.2**
-
-### Property 38: Direct UI Update Optimization
-*For any* direct UI update, the system should execute immediately without LLM invocation.
-**Validates: Requirements 8.3**
-
-### Property 39: Chart Highlighting Events
-*For any* chart highlighting request, the system should emit events with chartIds for frontend rendering.
-**Validates: Requirements 8.4**
-
-### Property 40: Data Story Coordination
-*For any* generated data story, the system should coordinate step-by-step playback with audio and chart highlighting.
-**Validates: Requirements 8.5**
-
-### Property 41: Data Story Intent Event
-*For any* detected data story intent, the system should emit a data story suggestion event.
-**Validates: Requirements 9.1**
-
-### Property 42: Strategic Commentary Generation
-*For any* accepted data story suggestion, the system should generate strategic commentary with chart references.
-**Validates: Requirements 9.2**
-
-### Property 43: Data Story Structure Completeness
-*For any* generated data story, steps should include talking points and chart IDs.
-**Validates: Requirements 9.3**
-
-### Property 44: Audio Generation
-*For any* audio request, the system should generate narration using Azure OpenAI TTS or local TTS.
-**Validates: Requirements 9.4**
-
-### Property 45: TTS Fallback
-*For any* audio generation failure, the system should fallback to browser TTS for accessibility.
-**Validates: Requirements 9.5**
-
-### Property 46: Operation Tracing
-*For any* agent operation, the system should create a Langfuse trace with nested spans.
-**Validates: Requirements 10.1**
-
-### Property 47: LLM Metrics Logging
-*For any* LLM call, the system should log token usage, latency, and cost.
-**Validates: Requirements 10.2**
-
-### Property 48: Retrieval Performance Tracking
-*For any* retrieval operation, the system should track semantic scores, metadata filtering effectiveness, and reranker performance.
-**Validates: Requirements 10.3**
-
-### Property 49: Evaluation Metrics Logging
-*For any* quality evaluation, the system should log faithfulness, relevance, and correctness scores.
-**Validates: Requirements 10.4**
-
-### Property 50: Trace Export
-*For any* completed trace, the system should export to OpenTelemetry Collector for unified dashboards.
-**Validates: Requirements 10.5**
-
-### Property 51: LlamaIndex Chunking
-*For any* ingested document, the system should use LlamaIndex for chunking with semantic splitters.
-**Validates: Requirements 11.1**
-
-### Property 52: Embedding Generation
-*For any* created chunk, the system should generate embeddings using Azure OpenAI or HuggingFace models.
-**Validates: Requirements 11.2**
-
-### Property 53: Vector Storage with Metadata
-*For any* generated embedding, the system should store vectors in pgvector with complete metadata.
-**Validates: Requirements 11.3**
-
-### Property 54: Post-Indexing Coverage Evaluation
-*For any* completed indexing operation, the system should trigger coverage evaluation to identify knowledge gaps.
-**Validates: Requirements 11.4**
-
-### Property 55: Schema Change Re-indexing
-*For any* detected schema change, the system should invalidate cache and re-index affected documents.
-**Validates: Requirements 11.5**
-
-### Property 56: SQL Routing with Schema Context
-*For any* data analysis request, the system should route to SQLCoder with ClickHouse MCP schema context.
-**Validates: Requirements 12.1**
-
-### Property 57: SQL Schema Validation
-*For any* generated SQL, the system should validate against real schema to prevent hallucinations.
-**Validates: Requirements 12.2**
-
-### Property 58: Read-Only SQL Execution
-*For any* SQL execution, the system should enforce read-only mode via MCP for safety.
-**Validates: Requirements 12.3**
-
-### Property 59: Structured Result Formatting
-*For any* SQL execution completion, the system should return structured results with metadata.
-**Validates: Requirements 12.4**
-
-### Property 60: Schema Caching
-*For any* schema access, the system should use in-memory cache (refreshed every 60 seconds) for performance.
-**Validates: Requirements 12.5**
-
-### Property 61: Persona-Aware Visualization
-*For any* visualization request, the system should consider user persona (analyst, executive, manager, stakeholder).
-**Validates: Requirements 13.1**
+*For any* set of Domain Experts executing in parallel, the system should aggregate all results before proceeding to synthesis phase.
 
-### Property 62: ECharts Persona Recommendations
-*For any* chart generation, the system should use ECharts MCP with persona-aware recommendations.
-**Validates: Requirements 13.2**
+**Validates:** Requirements 1.3, 3.4
 
-### Property 63: Analyst Visualization Preferences
-*For any* analyst persona, the system should prefer detailed visualizations (scatter, heatmap, detailed tables).
-**Validates: Requirements 13.3**
+### Property 4: Translator Schema Validation
+*For any* query generated by Translator, the system should validate table/column references against Schema Registry before execution.
 
-### Property 64: Executive Visualization Preferences
-*For any* executive persona, the system should prefer summary visualizations (KPI cards, line, bar).
-**Validates: Requirements 13.4**
+**Validates:** Requirements 3.1, 3.2, 12.2
 
-### Property 65: Preference Learning
-*For any* user feedback on visualizations, the system should learn preferences and adjust future recommendations.
-**Validates: Requirements 13.5**
+### Property 5: Parlant Policy Enforcement
+*For any* agent action, Parlant middleware should evaluate and enforce policy rules (BLOCK, FLAG, or CLARIFY).
 
-### Property 66: MCP Message Encryption
-*For any* agent communication, the system should encrypt all MCP channel messages.
-**Validates: Requirements 14.1**
+**Validates:** Requirements 4.1, 4.3, 14.1
 
-### Property 67: Provenance Logging
-*For any* operation, the system should log with complete provenance (user, timestamp, agent, version).
-**Validates: Requirements 14.2**
+### Property 6: Quality-Based Review Routing
+*For any* generated answer, the Evaluator should route to Human Review if overall quality score < 0.8.
 
-### Property 68: PII Masking
-*For any* detected PII, the system should apply masking or redaction policies.
-**Validates: Requirements 14.3**
-
-### Property 69: Role-Based Access Control
-*For any* human reviewer data access, the system should enforce role-based access control.
-**Validates: Requirements 14.4**
-
-### Property 70: Audit Trail Completeness
-*For any* audit log query, the system should provide complete traceability for compliance reporting.
-**Validates: Requirements 14.5**
-
-### Property 71: Feedback Trace Storage
-*For any* collected human feedback, the system should store traces with corrections in LightningStore.
-**Validates: Requirements 15.1**
-
-### Property 72: Error Pattern Identification
-*For any* Agent Lightning pattern analysis, the system should identify routing errors and prompt weaknesses.
-**Validates: Requirements 15.2**
-
-### Property 73: Optimization Deployment
-*For any* generated optimization, the system should update Parlant guidelines and prompt templates.
-**Validates: Requirements 15.3**
-
-### Property 74: Statistical A/B Testing
-*For any* A/B test, the system should compare old and new policies with statistical significance.
-**Validates: Requirements 15.4**
-
-### Property 75: Automated Policy Promotion
-*For any* validated improvement, the system should promote optimized policies to production automatically.
-**Validates: Requirements 15.5**
-
-### Property 76: Microsoft Agent Framework A2A Support
-*For any* agent-to-agent communication, the system should support both SingleThreadedAgentRuntime and GrpcWorkerAgentRuntime communication channels.
-**Validates: Requirements 16.1**
-
-### Property 77: SingleThreadedAgentRuntime Performance
-*For any* single-threaded communication, the system should provide high-performance message passing without serialization overhead via SingleThreadedAgentRuntime.
-**Validates: Requirements 16.2**
-
-### Property 78: GrpcWorkerAgentRuntime Distributed Communication
-*For any* distributed communication, the system should support inter-process and distributed agent communication via GrpcWorkerAgentRuntime with gRPC protocol.
-**Validates: Requirements 16.3**
-
-### Property 79: AG-UI Protocol Implementation
-*For any* human interaction requirement, the system should implement ag-ui protocol for agent-to-human integration.
-**Validates: Requirements 16.4**
-
-### Property 80: Factory Pattern for Adapters
-*For any* new integration module, the system should provide Factory Pattern for creating different types of integration adapters.
-**Validates: Requirements 16.5**
-
-### Property 81: Adapter Pattern for External Systems
-*For any* connection to diverse external systems, the system should implement Adapter Pattern for seamless integration.
-**Validates: Requirements 16.6**
-
-### Property 82: Plug-and-Play Module Loading
-*For any* integration module development, the system should support plug-and-play loading without system restart.
-**Validates: Requirements 16.7**
-
-### Property 83: External Configuration Support
-*For any* configuration change, the system should allow integration modules to be configured via external configuration files.
-**Validates: Requirements 16.8**
-
-### Property 84: Extension Points
-*For any* extensibility requirement, the system should provide clear extension points for adding new integration capabilities.
-**Validates: Requirements 16.9**
-
-### Property 85: Agent Registry for Discovery
-*For any* agent discovery need, the system should maintain an agent registry for dynamic discovery of available agents.
-**Validates: Requirements 16.10**
-
-
-## Error Handling
-
-### Error Categories
-
-1. **Agent Failures**: Timeout, crash, invalid output
-2. **Retrieval Failures**: No documents found, vector DB unavailable
-3. **Generation Failures**: LLM timeout, rate limit, invalid response
-4. **Evaluation Failures**: Metric computation error, threshold violation
-5. **System Failures**: Database connection, MCP channel error, network issue
-
-### Error Handling Strategies
-
-**Retry Logic**:
-- Exponential backoff for transient failures (3 retries max)
-- Circuit breaker pattern for persistent failures
-- Fallback to alternative agents/models when available
-
-**Escalation Paths**:
-
-```python
-class ErrorHandler:
-    async def handle_agent_failure(self, agent: str, error: Exception) -> Response:
-        if is_transient(error) and retry_count < 3:
-            return await retry_with_backoff(agent)
-        elif has_fallback(agent):
-            return await execute_fallback(agent)
-        else:
-            return await escalate_to_human_review(agent, error)
-    
-    async def handle_retrieval_failure(self, error: Exception) -> Response:
-        # Try alternative retrieval strategies
-        if semantic_search_failed:
-            return await try_metadata_filter()
-        elif all_strategies_failed:
-            return await return_empty_with_explanation()
-    
-    async def handle_generation_failure(self, error: Exception) -> Response:
-        # Fallback to simpler model or cached response
-        if rate_limit_error:
-            return await use_fallback_model()
-        elif timeout_error:
-            return await use_cached_similar_response()
-```
-
-**Logging and Alerting**:
-- All errors logged to Langfuse with full context
-- Critical errors trigger alerts to on-call team
-- Error patterns analyzed for system improvements
-
-## Testing Strategy
-
-### Unit Testing
-
-**Framework**: pytest with async support
-
-**Coverage Areas**:
-- Agent interface contracts
-- Data model validation
-- MCP message serialization/deserialization
-- Routing logic (Parlant guidelines)
-- Evaluation metrics computation
-
-**Example Unit Tests**:
-```python
-@pytest.mark.asyncio
-async def test_intent_parser_extracts_entities():
-    """Test that intent parser extracts entities from query"""
-    parser = IntentParserAgent()
-    result = await parser.parse_intent("Show me orders from customer ABC123")
-    
-    assert result.intent == "order_lookup"
-    assert "customer_id" in result.entities
-    assert result.entities["customer_id"] == "ABC123"
-    assert result.confidence > 0.8
-
-@pytest.mark.asyncio
-async def test_evaluator_computes_all_metrics():
-    """Test that evaluator computes all 7 RAG characteristics"""
-    evaluator = EvaluatorAgent()
-    result = await evaluator.evaluate(query, context, answer)
-    
-    assert result.faithfulness is not None
-    assert result.relevance is not None
-    assert result.correctness is not None
-    assert result.coverage is not None
-    assert result.consistency is not None
-    assert result.freshness is not None
-    assert result.traceability is not None
-```
+**Validates:** Requirements 6.3, 6.4
+
+### Property 7: Clarification Loop Completion
+*For any* Two-Pass workflow, the system should persist conversation state and resume execution after user clarification.
+
+**Validates:** Requirements 2.2, 7.1
+
+### Property 8: Credential Isolation
+*For any* query, Translator Agent should never have access to database credentials (held only by Domain Experts).
+
+**Validates:** Requirements 12.3, 14.4
+
+### Property 9: MCP Standard Compliance
+*For any* external service call, agents should use standardized MCP protocol for tool invocation.
+
+**Validates:** Requirements 16.1, 16.6
+
+### Property 10: Runtime Configurability
+*For any* agent communication, the system should support both SingleThreadedAgentRuntime and GrpcWorkerAgentRuntime via configuration.
+
+**Validates:** Requirements 16.1, 16.2, 16.3
+
+---
+
+## 9. Testing Strategy
 
 ### Property-Based Testing
 
-**Framework**: Hypothesis (Python property-based testing library)
+**Framework:** Hypothesis (Python)
 
-**Configuration**: Each property test runs 100 iterations minimum
-
-**Test Tagging**: Each property test tagged with format `**Feature: mcp-multi-agent-rag, Property {number}: {property_text}**`
-
-**Example Property Tests**:
+**Example Tests:**
 
 ```python
 from hypothesis import given, strategies as st
+import pytest
 
-@given(query=st.text(min_size=1, max_size=500))
+@given(query=st.text(min_size=5, max_size=200))
 @pytest.mark.asyncio
-async def test_property_1_orchestrator_task_decomposition(query):
+async def test_property_1_intent_parsing_completeness(query):
     """
-    **Feature: mcp-multi-agent-rag, Property 1: Orchestrator Task Decomposition**
-    For any user query, the Orchestrator Agent should decompose it into 
-    a sequence of agent-specific tasks.
+    Property 1: Intent Parsing Completeness
+    For any query, Parser returns structured context with entities/confidence
     """
-    orchestrator = OrchestratorAgent()
-    tasks = await orchestrator.decompose_task(query)
-    
-    # Property: decomposition always produces at least one task
-    assert len(tasks) > 0
-    # Property: all tasks have valid agent assignments
-    assert all(task.agent in VALID_AGENTS for task in tasks)
-    # Property: tasks have execution order
-    assert all(hasattr(task, 'order') for task in tasks)
+    parser = IntentParserAgent()
+    result = await parser.parse_intent(query)
+
+    assert isinstance(result, IntentContext)
+    assert hasattr(result, 'trace_id')
+    assert hasattr(result, 'confidence_score')
+    assert 0.0 <= result.confidence_score <= 1.0
 
 @given(
-    intent=st.text(min_size=1),
-    confidence=st.floats(min_value=0.0, max_value=1.0)
+    confidence=st.floats(min_value=0.0, max_value=1.0),
+    has_unresolved=st.booleans()
 )
-@pytest.mark.asyncio
-async def test_property_8_low_confidence_routing(intent, confidence):
+def test_property_2_workflow_routing(confidence, has_unresolved):
     """
-    **Feature: mcp-multi-agent-rag, Property 8: Low Confidence Routing**
-    For any intent with confidence below threshold, the system should 
-    route to fallback handling or human review.
+    Property 2: Workflow Routing Determinism
+    Routing decision based on confidence and slot completeness
     """
-    threshold = 0.7
-    router = ParlantRouter()
-    
-    intent_result = IntentResult(
-        intent=intent,
-        entities={},
-        confidence=confidence,
-        query_type=QueryType.GENERAL_QA,
-        requires_clarification=False
+    planner = PlannerAgent()
+    intent = IntentContext(
+        confidence_score=confidence,
+        unresolved_slots=["project"] if has_unresolved else []
     )
-    
-    decision = router.route_based_on_confidence(intent_result)
-    
-    # Property: low confidence always triggers fallback or review
-    if confidence < threshold:
-        assert decision.route_type in ["fallback", "human_review"]
+
+    decision = planner.decide(intent)
+
+    if confidence < 0.7 and has_unresolved:
+        assert isinstance(decision, ClarificationRequest)
     else:
-        assert decision.route_type == "normal"
-
-@given(
-    documents=st.lists(
-        st.builds(Document, 
-            id=st.uuids(),
-            content=st.text(min_size=10),
-            source=st.text(min_size=1),
-            confidence=st.floats(min_value=0.0, max_value=1.0)
-        ),
-        min_size=1,
-        max_size=20
-    )
-)
-@pytest.mark.asyncio
-async def test_property_14_result_deduplication(documents):
-    """
-    **Feature: mcp-multi-agent-rag, Property 14: Result Deduplication**
-    For any set of retrieval results from multiple strategies, the system 
-    should merge and deduplicate candidate chunks.
-    """
-    retriever = KnowledgeRetrieverAgent()
-    
-    # Introduce duplicates
-    documents_with_dupes = documents + documents[:len(documents)//2]
-    
-    merged = await retriever.merge_and_deduplicate(documents_with_dupes)
-    
-    # Property: no duplicate document IDs
-    doc_ids = [doc.id for doc in merged]
-    assert len(doc_ids) == len(set(doc_ids))
-    
-    # Property: all original documents preserved
-    original_ids = set(doc.id for doc in documents)
-    merged_ids = set(doc.id for doc in merged)
-    assert original_ids.issubset(merged_ids)
-
-@given(
-    answer=st.builds(Answer,
-        id=st.uuids(),
-        text=st.text(min_size=10),
-        sources=st.lists(st.text(min_size=1), min_size=1),
-        confidence=st.floats(min_value=0.0, max_value=1.0)
-    ),
-    context=st.lists(
-        st.builds(Document,
-            id=st.uuids(),
-            content=st.text(min_size=10),
-            source=st.text(min_size=1)
-        ),
-        min_size=1
-    )
-)
-@pytest.mark.asyncio
-async def test_property_27_comprehensive_quality_assessment(answer, context):
-    """
-    **Feature: mcp-multi-agent-rag, Property 27: Comprehensive Quality Assessment**
-    For any answer evaluation, the system should assess all seven RAG 
-    characteristics.
-    """
-    evaluator = EvaluatorAgent()
-    query = "test query"
-    
-    result = await evaluator.evaluate(query, context, answer)
-    
-    # Property: all 7 characteristics are computed
-    assert result.faithfulness is not None
-    assert result.relevance is not None
-    assert result.correctness is not None
-    assert result.coverage is not None
-    assert result.consistency is not None
-    assert result.freshness is not None
-    assert result.traceability is not None
-    
-    # Property: all scores are in valid range [0, 1]
-    scores = [
-        result.faithfulness, result.relevance, result.correctness,
-        result.coverage, result.consistency, result.freshness, result.traceability
-    ]
-    assert all(0.0 <= score <= 1.0 for score in scores)
+        assert isinstance(decision, ExecutionPlan)
 ```
 
 ### Integration Testing
 
-**Scope**: End-to-end workflows across multiple agents
-
-**Test Scenarios**:
-1. Complete query → answer pipeline with high-quality response
-2. Low-quality answer → human review → feedback loop
-3. SQL generation → ClickHouse execution → result formatting
-4. Data story generation → audio narration → chart highlighting
-5. Multi-LOB retrieval → result merging → reranking
-
-**Example Integration Test**:
+**End-to-End Scenario:**
 ```python
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_end_to_end_query_pipeline():
-    """Test complete pipeline from query to answer"""
-    # Setup
-    orchestrator = OrchestratorAgent()
-    query = "What are the top 10 customers by revenue this quarter?"
-    
-    # Execute
-    answer = await orchestrator.process_query(query, user_id="test_user")
-    
-    # Verify
-    assert answer.text is not None
-    assert len(answer.sources) > 0
-    assert answer.confidence > 0.7
-    assert answer.provenance["routing_decision"] is not None
-    assert answer.provenance["retrieval_strategy"] is not None
-    
-    # Verify tracing
-    traces = await langfuse_client.get_traces(query_id=answer.id)
-    assert len(traces) > 0
-    assert "orchestrator" in traces[0].spans
-    assert "intent_parser" in traces[0].spans
-    assert "knowledge_retriever" in traces[0].spans
-    assert "answer_generator" in traces[0].spans
-    assert "evaluator" in traces[0].spans
+async def test_complete_query_pipeline():
+    """Test One-Pass workflow from query to answer"""
+
+    # Setup mocks for MCP services
+    with mock_mapper(), mock_schema_registry():
+        # Execute complete pipeline
+        result = await run_agentic_rag(
+            "What was Q3 revenue for customer ABC123?",
+            session_id="test-123"
+        )
+
+        # Verify answer structure
+        assert isinstance(result, Answer)
+        assert result.text is not None
+        assert len(result.sources) > 0
+        assert result.confidence >= 0.0
+
+        # Verify evaluation ran
+        assert hasattr(result, 'evaluation_score')
 ```
 
-### Performance Testing
+---
 
-**Load Testing**:
-- Simulate 100 concurrent users
-- Target: 95th percentile latency < 3 seconds
-- Target: Throughput > 50 queries/second
+## 10. Deployment Strategy
 
-**Stress Testing**:
-- Gradually increase load until system degradation
-- Identify bottlenecks (LLM API, vector DB, database)
-- Verify graceful degradation and error handling
+### Technology Stack
 
-**Tools**: Locust for load generation, Grafana for monitoring
+**Backend:**
+- **Microsoft Agent Framework** (`autogen-agentchat`) - Agent orchestration with Swarm
+- **MCP Protocol** - Standardized tool communication
+- **FastAPI** - HTTP server
+- **Python 3.12+** - Runtime
+- **Azure OpenAI** / **OpenAI** - LLM providers
+- **asyncpg** - PostgreSQL driver
 
-## Deployment Strategy
+**Data Layer:**
+- **PostgreSQL** - Metadata and transactional data
+- **pgvector** - Vector similarity search
+- **Azure AI Search** - Alternative vector store option
+- **Redis** - Caching layer
 
-### Infrastructure
+**Middleware:**
+- **Parlant** - Policy and behavioral guidelines
+- **LlamaIndex** - Document indexing and chunking
+- **Langfuse** - Observability and tracing
+- **RAGAS** - Quality evaluation metrics
 
-**Cloud Platform**: Azure
+**Frontend:**
+- **Next.js 16** - React framework
+- **CopilotKit** - Agent UI framework with HIL
+- **TypeScript** - Type safety
+- **Tailwind CSS** - Styling
 
-**Components**:
-- **Frontend**: Next.js app on Azure Static Web Apps
-- **Backend**: FastAPI on Azure Container Apps
-- **Database**: Azure Database for PostgreSQL with pgvector
-- **Vector Store**: Azure AI Search or self-hosted pgvector
-- **Analytics DB**: ClickHouse on Azure VMs
-- **Observability**: Langfuse Cloud or self-hosted
-- **LLM**: Azure OpenAI Service
+**Development:**
+- **Hypothesis** - Property-based testing
+- **pytest** - Test framework
+- **Docker** - Containerization
+- **GitHub Actions** - CI/CD
 
 ### Containerization
 
-**Docker Images**:
+**Backend Dockerfile:**
 ```dockerfile
-# Backend Dockerfile
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY pyproject.toml .
+RUN pip install --no-cache-dir -e .
 
 COPY . .
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8880"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
 
-**Docker Compose** (for local development):
+**Docker Compose:**
 ```yaml
 version: '3.8'
 
@@ -4437,1100 +1040,79 @@ services:
   backend:
     build: ./backend
     ports:
-      - "8880:8880"
+      - "8000:8000"
     environment:
       - DATABASE_URL=postgresql://user:pass@db:5432/rag_system
       - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT}
-      - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY}
     depends_on:
       - db
-      - clickhouse
-  
-  frontend:
-    build: ./frontend
-    ports:
-      - "3000:3000"
-    environment:
-      - NEXT_PUBLIC_API_URL=http://backend:8880
-  
+      - redis
+
   db:
     image: pgvector/pgvector:pg16
     environment:
-      - POSTGRES_USER=user
-      - POSTGRES_PASSWORD=pass
-      - POSTGRES_DB=rag_system
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: pass
+      POSTGRES_DB: rag_system
     volumes:
       - postgres_data:/var/lib/postgresql/data
-  
-  clickhouse:
-    image: clickhouse/clickhouse-server:latest
-    ports:
-      - "8123:8123"
-    volumes:
-      - clickhouse_data:/var/lib/clickhouse
+
+  redis:
+    image: redis:7-alpine
 
 volumes:
   postgres_data:
-  clickhouse_data:
 ```
 
 ### CI/CD Pipeline
 
-**GitHub Actions Workflow**:
+**GitHub Actions:**
 ```yaml
 name: CI/CD Pipeline
 
 on:
   push:
     branches: [main, develop]
-  pull_request:
-    branches: [main]
 
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - uses: actions/setup-python@v4
         with:
-          python-version: '3.11'
-      - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
-          pip install pytest pytest-asyncio hypothesis
-      - name: Run unit tests
-        run: pytest tests/unit -v
-      - name: Run property tests
-        run: pytest tests/property -v --hypothesis-profile=ci
-      - name: Run integration tests
-        run: pytest tests/integration -v
-  
-  build:
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Build Docker images
-        run: |
-          docker build -t rag-backend:${{ github.sha }} ./backend
-          docker build -t rag-frontend:${{ github.sha }} ./frontend
-      - name: Push to Azure Container Registry
-        run: |
-          az acr login --name myregistry
-          docker push rag-backend:${{ github.sha }}
-          docker push rag-frontend:${{ github.sha }}
-  
+          python-version: '3.12'
+      - run: pip install -e . && pip install pytest hypothesis
+      - run: pytest tests/ -v
+
   deploy:
-    needs: build
+    needs: test
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     steps:
-      - name: Deploy to Azure Container Apps
-        run: |
-          az containerapp update \
-            --name rag-backend \
-            --resource-group rag-system-rg \
-            --image myregistry.azurecr.io/rag-backend:${{ github.sha }}
+      - uses: azure/login@v1
+      - run: az containerapp update --name rag-system --image ${{ env.IMAGE_TAG }}
 ```
 
-### Monitoring and Alerting
-
-**Metrics to Monitor**:
-- Query latency (p50, p95, p99)
-- Agent execution time
-- LLM token usage and cost
-- Retrieval quality scores
-- Evaluation scores (faithfulness, relevance, correctness)
-- Error rates by agent
-- Human review queue length
-
-**Alerts**:
-- Latency > 5 seconds for 5 minutes
-- Error rate > 5% for 5 minutes
-- Quality scores < 0.7 for 10 consecutive queries
-- Human review queue > 50 items
-- LLM cost > $100/hour
-
-**Dashboards**:
-- Real-time query pipeline visualization
-- Agent performance metrics
-- Cost tracking and optimization
-- Quality trends over time
-- Human feedback analysis
-
-## Complete Integration Workflow: Parlant + CopilotKit + Microsoft Agent Framework
-
-### End-to-End Query Processing with Design Thinking
-
-```python
-async def process_query_with_design_thinking(query: str, user_id: str) -> Answer:
-    """
-    Complete RAG pipeline with Parlant guidelines and CopilotKit HIL
-    Follows Double Diamond: Discover → Define → Develop → Deliver
-    """
-    
-    # ===== DISCOVER PHASE (Diverge) =====
-    # Green Hat: Creative exploration
-    # White Hat: Fact gathering
-    # Red Hat: Empathy and intent
-    
-    # Parlant ensures diverse exploration
-    interpretations = await parlant_agent.process({
-        query,
-        phase: "discover",
-        # Guidelines automatically enforce:
-        # - Green Hat: Generate 3+ diverse interpretations
-        # - White Hat: Retrieve supporting evidence
-        # - Red Hat: Assess user intent
-    })
-    
-    # CopilotKit HIL: Request clarification if needed
-    if interpretations.needsClarification:
-        user_selection = await copilotkit.requestClarification({
-            interpretations: interpretations.candidates
-        })
-        interpretations.selected = user_selection
-    
-    # ===== DEFINE PHASE (Converge) =====
-    # Black Hat: Critical validation
-    # Blue Hat: Process control
-    
-    # Parlant ensures critical validation
-    validation = await parlant_agent.process({
-        interpretations,
-        phase: "define",
-        # Guidelines automatically enforce:
-        # - Black Hat: Critical validation
-        # - Blue Hat: Structured selection
-    })
-    
-    # CopilotKit HIL: Validate intent if borderline
-    if validation.confidence >= 0.6 and validation.confidence < 0.75:
-        user_approval = await copilotkit.validateIntent({
-            formal_intent: validation.intent,
-            validation_concerns: validation.concerns
-        })
-        if not user_approval.approved:
-            return process_query_with_design_thinking(query, user_id)  # Restart
-    
-    # ===== DEVELOP PHASE (Diverge) =====
-    # Green Hat: Creative alternatives
-    # Yellow Hat: Benefit analysis
-    # White Hat: Data gathering
-    
-    # Parlant ensures creative strategy generation
-    strategies = await parlant_agent.process({
-        formal_intent: validation.intent,
-        phase: "develop",
-        # Guidelines automatically enforce:
-        # - Green Hat: Generate alternative strategies
-        # - Yellow Hat: Evaluate benefits
-    })
-    
-    # CopilotKit HIL: Let user select strategy if similar performance
-    if strategies.needsUserSelection:
-        user_choice = await copilotkit.selectStrategy({
-            strategies: strategies.candidates
-        })
-        strategies.selected = user_choice
-    
-    # Execute retrieval and generate answers
-    answers = await parlant_agent.process({
-        strategy: strategies.selected,
-        phase: "develop_answers"
-    })
-    
-    # ===== DELIVER PHASE (Converge) =====
-    # Black Hat: Quality evaluation
-    # Blue Hat: Delivery orchestration
-    
-    # Parlant ensures quality evaluation
-    evaluation = await parlant_agent.process({
-        answers,
-        phase: "deliver",
-        # Guidelines automatically enforce:
-        # - Black Hat: Quality evaluation
-        # - Blue Hat: Delivery orchestration
-    })
-    
-    # CopilotKit HIL: Request approval if medium quality
-    if evaluation.quality_score >= 0.6 and evaluation.quality_score < 0.8:
-        user_approval = await copilotkit.approveAnswer({
-            answer: evaluation.best_answer,
-            quality_metrics: evaluation.metrics,
-            concerns: evaluation.concerns
-        })
-        
-        if not user_approval.approved:
-            return process_query_with_design_thinking(query, user_id)  # Restart
-        
-        if user_approval.edited_answer:
-            evaluation.best_answer = user_approval.edited_answer
-    
-    # Deliver final answer
-    return evaluation.best_answer
-```
-
-### Integration Flow Diagram
-
-```mermaid
-graph TD
-    subgraph "Discover Phase (Diverge)"
-        A[User Query] --> B{Parlant: Ambiguity Check}
-        B -->|Clear| C[ReAct: Generate Interpretations]
-        B -->|Ambiguous| D[CopilotKit HIL: Request Clarification]
-        D --> C
-        C --> E{Parlant: Diversity Check}
-        E -->|Pass| F[Multiple Interpretations]
-        E -->|Fail| C
-        
-        style B fill:#FFE4B5
-        style D fill:#87CEEB
-        style E fill:#FFE4B5
-    end
-    
-    subgraph "Define Phase (Converge)"
-        F --> G[CoT: Validate Each]
-        G --> H{Parlant: Confidence Check}
-        H -->|High 0.75+| I[Select Best Intent]
-        H -->|Borderline 0.6-0.75| J[CopilotKit HIL: Validate Intent]
-        H -->|Low <0.6| K[Parlant: Canned Response]
-        J --> I
-        K --> A
-        I --> L[Formal Intent]
-        
-        style H fill:#FFE4B5
-        style J fill:#87CEEB
-        style K fill:#FFE4B5
-    end
-    
-    subgraph "Develop Phase (Diverge)"
-        L --> M[ReAct: Generate Strategies]
-        M --> N[Execute Strategies]
-        N --> O{Parlant: Performance Check}
-        O -->|Clear Winner| P[Select Strategy]
-        O -->|Similar Scores| Q[CopilotKit HIL: User Selects]
-        Q --> P
-        P --> R[ToT: Generate Answers]
-        R --> S[Answer Candidates]
-        
-        style O fill:#FFE4B5
-        style Q fill:#87CEEB
-    end
-    
-    subgraph "Deliver Phase (Converge)"
-        S --> T[CoT: Evaluate Quality]
-        T --> U{Parlant: Quality Gate}
-        U -->|High 0.8+| V[Direct Delivery]
-        U -->|Medium 0.6-0.8| W[CopilotKit HIL: Approve Answer]
-        U -->|Low <0.6| X[Parlant: Route to Review]
-        W -->|Approved| V
-        W -->|Rejected| Y[Regenerate]
-        X --> Z[Human Review]
-        V --> AA[Final Answer]
-        
-        style U fill:#FFE4B5
-        style W fill:#87CEEB
-        style X fill:#FFE4B5
-    end
-```
-
-**Legend:**
-- 🟡 **Parlant (Orange)**: Behavioral guidelines, quality gates, routing rules
-- 🔵 **CopilotKit HIL (Blue)**: Human intervention points, approval workflows
-- ⚪ **Agent Patterns (White)**: ReAct, CoT, ToT, Plan-and-Execute
-
-### Benefits of Complete Integration
-
-**1. Reliability (Parlant)**
-- Ensured compliance with design thinking principles
-- No prompt engineering required
-- Guaranteed Six Thinking Hats coverage
-- Explainable guideline matching
-
-**2. Control (CopilotKit)**
-- Strategic human oversight at critical points
-- Quality gates prevent low-quality outputs
-- Ambiguity resolution improves accuracy
-- User preferences guide agent behavior
-
-**3. Transparency**
-- Parlant explains which guidelines were matched
-- CopilotKit shows intermediate agent state
-- Users understand agent reasoning
-- Full visibility into decision-making
-
-**4. Efficiency**
-- Agents handle routine exploration/validation
-- Humans intervene only when needed
-- Optimal balance of speed and quality
-- Reduced cognitive load on users
-
-**5. Scalability (Microsoft Agent Framework)**
-- SingleThreadedAgentRuntime for single-process deployment
-- GrpcWorkerAgentRuntime for distributed scaling
-- Configuration-driven runtime selection
-- No code changes needed to scale
-
-## Security Considerations
-
-### Authentication and Authorization
-
-- **User Authentication**: OAuth 2.0 / OpenID Connect
-- **API Authentication**: JWT tokens with short expiration
-- **Service-to-Service**: Managed identities (Azure AD)
-- **RBAC**: Role-based access for human reviewers
-
-### Data Protection
-
-- **Encryption in Transit**: TLS 1.3 for all communications
-- **Encryption at Rest**: Azure Storage encryption
-- **PII Detection**: Automated scanning and masking
-- **Data Retention**: Configurable retention policies (30/90/365 days)
-
-### Compliance
-
-- **Audit Logging**: Complete provenance for all operations
-- **GDPR**: Right to deletion, data portability
-- **SOC 2**: Access controls, change management, monitoring
-- **HIPAA** (if applicable): PHI handling, BAA agreements
-
-## Scalability Considerations
-
-### Horizontal Scaling
-
-- **Stateless Agents**: All agents designed for horizontal scaling
-- **Load Balancing**: Azure Load Balancer for backend instances
-- **Database Scaling**: Read replicas for PostgreSQL
-- **Vector DB Scaling**: Sharding for large document collections
-
-### Caching Strategy
-
-- **Schema Cache**: In-memory cache for ClickHouse schema (60s TTL)
-- **Embedding Cache**: Redis for frequently accessed embeddings
-- **Response Cache**: Cache similar queries with semantic matching
-- **Prompt Cache**: Cache optimized prompts from Agent Lightning
-
-### Performance Optimization
-
-- **Batch Processing**: Batch embedding generation for ingestion
-- **Parallel Execution**: Concurrent retrieval strategies
-- **Connection Pooling**: Database connection pools
-- **Async I/O**: Full async/await for non-blocking operations
-
-## Future Enhancements
-
-### Phase 2 Features
-
-1. **Multi-Modal RAG**: Support for images, videos, audio in retrieval
-2. **Graph RAG**: Knowledge graph integration for relationship queries
-3. **Streaming Generation**: Token-by-token streaming for long answers
-4. **Multi-Language Support**: Internationalization for queries and answers
-5. **Advanced Personas**: Custom persona creation and management
-
-### Phase 3 Features
-
-1. **Federated Learning**: Privacy-preserving model updates
-2. **Active Learning**: Intelligent sample selection for human review
-3. **Explainable AI**: Detailed reasoning traces for all decisions
-4. **Multi-Tenant**: Isolated environments for different organizations
-5. **Edge Deployment**: On-premise deployment for sensitive data
-
-
-## Design Thinking Integration: Parlant + CopilotKit HIL
-
-### Overview
-
-The system integrates **Parlant behavioral guidelines** and **CopilotKit Human-in-the-Loop (HIL)** patterns to ensure reliable agent behavior and strategic human oversight. This integration maps to the **Double Diamond Design Process** (Discover → Define → Develop → Deliver) and **Six Thinking Hats** framework.
-
-### Parlant's Role: Ensured Compliance
-
-Parlant provides behavioral guidelines that agents reliably follow across all phases:
-
-**Key Parlant Features:**
-1. **Behavioral Guidelines**: Natural language rules contextually matched and enforced
-2. **Journeys**: Structured progression through workflow phases
-3. **Canned Responses**: Eliminate hallucinations in critical scenarios
-4. **Domain Adaptation**: Glossary terms and context variables
-5. **Guardrails**: Quality thresholds and risk assessment gates
-
-### CopilotKit HIL's Role: Strategic Human Control
-
-CopilotKit provides human intervention points where judgment adds value:
-
-**Key CopilotKit Features:**
-1. **renderAndWaitForResponse**: Synchronous human approval workflows
-2. **Generative UI (render)**: Asynchronous information display
-3. **Agentic State Streaming**: Real-time agent state visibility
-4. **Shared State (useCoAgent)**: Bidirectional app-agent communication
-
-### Integration by RAG Pipeline Phase
-
-#### Phase 1: Intent Parsing (Discover)
-
-**Parlant Guidelines:**
-```python
-# Green Hat: Creative exploration
-await agent.create_guideline(
-    condition="User query is ambiguous or has multiple interpretations",
-    action="Generate at least 3 diverse interpretations covering different domains (business, technical, emotional). Ensure diversity score above 0.6",
-    tools=[generate_interpretations, retrieve_evidence, assess_user_intent]
-)
-
-# White Hat: Fact gathering
-await agent.create_guideline(
-    condition="Exploring query interpretations",
-    action="Retrieve supporting evidence from knowledge base for each interpretation",
-    tools=[retrieve_evidence]
-)
-
-# Domain terminology
-await agent.create_glossary_term(
-    term="business performance",
-    definition="Metrics including revenue, growth, customer satisfaction, and operational efficiency"
-)
-```
-
-**CopilotKit HIL:**
-```typescript
-// Clarification request when interpretations have similar confidence
-useCopilotAction({
-  name: "request_clarification",
-  description: "Request user clarification when interpretations have similar confidence scores",
-  parameters: [
-    {
-      name: "interpretations",
-      type: "object[]",
-      description: "Top interpretations with similar confidence",
-      required: true,
-    },
-  ],
-  renderAndWaitForResponse: ({ args, respond }) => {
-    return (
-      <InterpretationSelector
-        interpretations={args.interpretations}
-        onSelect={(selected) => respond?.({ 
-          selectedInterpretation: selected,
-          userConfirmed: true 
-        })}
-        onProvideMore={() => respond?.({ 
-          needsMoreContext: true 
-        })}
-      />
-    );
-  },
-});
-
-// Show exploration progress
-useCoAgentStateRender({
-  name: "intent_parser_agent",
-  render: ({ state }) => (
-    <ExplorationProgress
-      interpretations={state.interpretations}
-      currentIteration={state.iteration}
-      diversityScore={state.diversity_score}
-    />
-  ),
-});
-```
-
-#### Phase 2: Routing (Define)
-
-**Parlant Guidelines:**
-```python
-# Black Hat: Critical validation
-await agent.create_guideline(
-    condition="Validating interpretation confidence",
-    action="Apply critical thinking: check factual grounding, identify risks and ambiguities, assess completeness. Reject interpretations with confidence below 0.6",
-    tools=[validate_interpretation, assess_risks]
-)
-
-# Blue Hat: Process control
-await agent.create_guideline(
-    condition="Selecting best interpretation from validated candidates",
-    action="Apply weighted scoring (confidence 40%, evidence quality 30%, completeness 20%, risk level 10%). Select highest scoring interpretation",
-    tools=[calculate_weighted_score, formalize_intent]
-)
-
-# Canned response for low confidence
-await agent.create_canned_response(
-    condition="All interpretations have confidence below 0.7",
-    response="I found multiple possible interpretations, but I'm not confident enough to proceed. Could you provide more context about: {missing_context_areas}?"
-)
-```
-
-**CopilotKit HIL:**
-```typescript
-// Intent validation for borderline confidence
-useCopilotAction({
-  name: "validate_intent",
-  description: "Request user validation when interpretation confidence is borderline (0.6-0.75)",
-  parameters: [
-    {
-      name: "formal_intent",
-      type: "object",
-      description: "The formalized intent to validate",
-      required: true,
-    },
-    {
-      name: "validation_concerns",
-      type: "string[]",
-      description: "Specific concerns identified by Black Hat analysis",
-      required: true,
-    },
-  ],
-  renderAndWaitForResponse: ({ args, respond }) => {
-    return (
-      <IntentValidationCard
-        intent={args.formal_intent}
-        concerns={args.validation_concerns}
-        onApprove={() => respond?.({ 
-          approved: true,
-          confidence_boost: 0.15 
-        })}
-        onReject={() => respond?.({ 
-          approved: false,
-          feedback: "User rejected interpretation" 
-        })}
-        onModify={(modifications) => respond?.({ 
-          approved: true,
-          modified_intent: modifications 
-        })}
-      />
-    );
-  },
-});
-```
-
-#### Phase 3: Retrieval (Develop)
-
-**Parlant Guidelines:**
-```python
-# Green Hat: Creative alternatives
-await agent.create_guideline(
-    condition="Generating retrieval strategies for formal intent",
-    action="Generate at least 3 alternative retrieval strategies (semantic, metadata-based, hybrid, graph-based)",
-    tools=[generate_retrieval_strategies]
-)
-
-# Yellow Hat: Benefit analysis
-await agent.create_guideline(
-    condition="Evaluating retrieval strategy performance",
-    action="Score strategies on recall (40%), precision (30%), latency (20%), cost (10%). Identify benefits of each approach",
-    tools=[evaluate_benefits, score_strategies]
-)
-
-# Context variable for real-time metrics
-await agent.create_variable(
-    name="retrieval_metrics",
-    tool=get_current_retrieval_metrics,
-    update_interval="on_strategy_execution"
-)
-```
-
-**CopilotKit HIL:**
-```typescript
-// Strategy selection when multiple strategies have similar performance
-useCopilotAction({
-  name: "select_retrieval_strategy",
-  description: "Let user choose retrieval strategy when multiple strategies have similar performance",
-  parameters: [
-    {
-      name: "strategies",
-      type: "object[]",
-      description: "Retrieval strategies with performance metrics",
-      required: true,
-    },
-  ],
-  renderAndWaitForResponse: ({ args, respond }) => {
-    return (
-      <StrategyComparisonTable
-        strategies={args.strategies}
-        metrics={["recall", "precision", "latency", "cost"]}
-        onSelect={(strategy) => respond?.({ 
-          selected_strategy: strategy,
-          user_preference: strategy.name 
-        })}
-        onAutoSelect={() => respond?.({ 
-          auto_select: true,
-          use_highest_score: true 
-        })}
-      />
-    );
-  },
-});
-
-// Show retrieval progress
-useCoAgentStateRender({
-  name: "knowledge_retriever_agent",
-  render: ({ state }) => (
-    <RetrievalDashboard
-      strategies={state.strategy_results}
-      showMetrics={true}
-      showDocuments={true}
-    />
-  ),
-});
-```
-
-#### Phase 4: Evaluation & Delivery (Deliver)
-
-**Parlant Guidelines:**
-```python
-# Black Hat: Quality evaluation
-await agent.create_guideline(
-    condition="Evaluating answer candidate quality",
-    action="Check faithfulness, relevance, correctness, completeness, consistency. Calculate overall score as average",
-    tools=[evaluate_answer_quality]
-)
-
-# Blue Hat: Delivery orchestration
-await agent.create_guideline(
-    condition="Answer quality score is 0.8 or above",
-    action="Deliver answer directly with citations",
-    tools=[format_answer, add_citations, deliver_to_user]
-)
-
-await agent.create_guideline(
-    condition="Answer quality score is between 0.6 and 0.8",
-    action="Route to human approval before delivery",
-    tools=[route_to_human_approval]
-)
-
-await agent.create_guideline(
-    condition="Answer quality score is below 0.6",
-    action="Route to human review with quality concerns",
-    tools=[route_to_human_review]
-)
-
-# Canned response for low quality
-await agent.create_canned_response(
-    condition="All answer candidates score below 0.6",
-    response="I couldn't generate a high-quality answer with the available information. The main issues are: {quality_issues}. Would you like me to try a different approach?"
-)
-```
-
-**CopilotKit HIL:**
-```typescript
-// Answer approval for medium quality or Black Hat concerns
-useCopilotAction({
-  name: "approve_answer",
-  description: "Request human approval for answers with quality score 0.6-0.8 or when Black Hat identifies risks",
-  parameters: [
-    {
-      name: "answer",
-      type: "string",
-      description: "The generated answer",
-      required: true,
-    },
-    {
-      name: "quality_metrics",
-      type: "object",
-      description: "Detailed quality scores",
-      required: true,
-    },
-    {
-      name: "concerns",
-      type: "string[]",
-      description: "Issues identified by Black Hat analysis",
-      required: true,
-    },
-  ],
-  renderAndWaitForResponse: ({ args, status, respond }) => {
-    return (
-      <AnswerApprovalCard
-        answer={args.answer}
-        qualityMetrics={args.quality_metrics}
-        concerns={args.concerns}
-        isExecuting={status === "executing"}
-        onApprove={() => respond?.({ 
-          approved: true,
-          delivery_authorized: true,
-          metadata: { approvedAt: new Date().toISOString() }
-        })}
-        onReject={() => respond?.({ 
-          approved: false,
-          feedback: "Answer quality insufficient"
-        })}
-        onEdit={(editedAnswer) => respond?.({ 
-          approved: true,
-          edited_answer: editedAnswer,
-          human_edited: true
-        })}
-      />
-    );
-  },
-});
-
-// Quality dashboard
-useCopilotAction({
-  name: "show_quality_metrics",
-  parameters: [
-    {
-      name: "evaluation_results",
-      type: "object",
-    },
-  ],
-  render: ({ args }) => (
-    <QualityDashboard
-      faithfulness={args.evaluation_results.faithfulness}
-      relevance={args.evaluation_results.relevance}
-      correctness={args.evaluation_results.correctness}
-      completeness={args.evaluation_results.completeness}
-      consistency={args.evaluation_results.consistency}
-      overallScore={args.evaluation_results.overall_score}
-      threshold={0.8}
-    />
-  ),
-});
-```
-
-### Decision Matrix: When to Use Parlant vs CopilotKit HIL
-
-| Scenario | Use Parlant | Use CopilotKit HIL | Rationale |
-|----------|-------------|-------------------|-----------|
-| Routine exploration | ✅ | ❌ | Parlant ensures consistent behavior |
-| Ambiguous query | ✅ | ✅ | Parlant explores, HIL resolves |
-| Validation checks | ✅ | ❌ | Parlant enforces quality rules |
-| Borderline quality | ✅ | ✅ | Parlant detects, HIL decides |
-| Strategy selection | ✅ | ✅ (optional) | Parlant scores, HIL overrides if needed |
-| Critical approval | ✅ | ✅ | Parlant routes, HIL approves |
-| Progress visibility | ❌ | ✅ | CopilotKit shows intermediate state |
-| Domain terminology | ✅ | ❌ | Parlant glossary ensures consistency |
-
-### Integration Benefits
-
-**Reliability (Parlant):**
-- Ensured compliance with design thinking principles
-- No prompt engineering required
-- Guaranteed Six Thinking Hats coverage
-- Explainable guideline matching
-
-**Control (CopilotKit):**
-- Strategic human oversight at critical points
-- Quality gates prevent low-quality outputs
-- Ambiguity resolution improves accuracy
-- User preferences guide agent behavior
-
-**Transparency:**
-- Parlant explains which guidelines were matched
-- CopilotKit shows intermediate agent state
-- Users understand agent reasoning
-- Full visibility into decision-making
-
-**Efficiency:**
-- Agents handle routine exploration/validation
-- Humans intervene only when needed
-- Optimal balance of speed and quality
-- Reduced cognitive load on users
-
-### Implementation Example
-
-```python
-# Backend: Parlant agent setup
-async def setup_rag_agent_with_parlant():
-    async with parlant.Server() as server:
-        agent = await server.create_agent(
-            name="RAG_Agent",
-            description="Multi-agent RAG with design thinking"
-        )
-        
-        # Intent Parser guidelines (Discover phase)
-        await agent.create_guideline(
-            condition="User query is ambiguous",
-            action="Generate diverse interpretations using Green Hat thinking",
-            tools=[generate_interpretations]
-        )
-        
-        # Routing guidelines (Define phase)
-        await agent.create_guideline(
-            condition="Validating interpretation",
-            action="Apply Black Hat critical thinking to assess risks",
-            tools=[validate_interpretation]
-        )
-        
-        # Retrieval guidelines (Develop phase)
-        await agent.create_guideline(
-            condition="Generating retrieval strategies",
-            action="Create alternatives using Green Hat, evaluate with Yellow Hat",
-            tools=[generate_strategies, evaluate_benefits]
-        )
-        
-        # Evaluation guidelines (Deliver phase)
-        await agent.create_guideline(
-            condition="Answer quality score below 0.8",
-            action="Route to human review with quality concerns",
-            tools=[route_to_human_review]
-        )
-        
-        return agent
-```
-
-```typescript
-// Frontend: CopilotKit HIL setup
-function RAGWithDesignThinking() {
-  // Intent clarification (Discover)
-  useCopilotAction({
-    name: "request_clarification",
-    renderAndWaitForResponse: ({ args, respond }) => (
-      <InterpretationSelector onSelect={respond} />
-    ),
-  });
-  
-  // Intent validation (Define)
-  useCopilotAction({
-    name: "validate_intent",
-    renderAndWaitForResponse: ({ args, respond }) => (
-      <IntentValidationCard onApprove={respond} />
-    ),
-  });
-  
-  // Strategy selection (Develop)
-  useCopilotAction({
-    name: "select_strategy",
-    renderAndWaitForResponse: ({ args, respond }) => (
-      <StrategyComparisonTable onSelect={respond} />
-    ),
-  });
-  
-  // Answer approval (Deliver)
-  useCopilotAction({
-    name: "approve_answer",
-    renderAndWaitForResponse: ({ args, respond }) => (
-      <AnswerApprovalCard onApprove={respond} />
-    ),
-  });
-  
-  return <div className="rag-interface">{/* UI components */}</div>;
-}
-```
-
-## Technology Stack
-
-### Current Implementation (Aligned with Existing Codebase)
-
-**Backend:**
-- **Microsoft Agent Framework** (`agent-framework`) - Core agent orchestration
-- **AG-UI Protocol** (`agent-framework-ag-ui`) - Frontend-backend communication
-- **FastAPI** - HTTP server and API endpoints
-- **Python 3.12+** - Runtime environment
-- **Azure OpenAI** or **OpenAI** - LLM providers (configurable via environment)
-- **Pydantic** - Data validation and serialization
-- **python-dotenv** - Environment configuration
-- **uvicorn** - ASGI server
-
-**Frontend:**
-- **Next.js 16** (App Router) with **React 19** and **TypeScript**
-- **CopilotKit** (`@copilotkit/react-core`, `@copilotkit/react-ui`, `@copilotkit/runtime`) - Agent UI framework
-- **AG-UI Client** (`@ag-ui/client`) - HTTP agent communication
-- **Tailwind CSS 4** - Styling
-- **Zod** - Schema validation
-
-**Development Tools:**
-- **Concurrently** - Run frontend and backend simultaneously
-- **ESLint** - Code linting
-- **TypeScript 5** - Type safety
-
-### Planned Additions for RAG System
-
-**Backend Extensions:**
-- **LlamaIndex** - Document indexing, chunking, and retrieval engines
-- **pgvector** with **PostgreSQL** - Vector database for embeddings
-- **ClickHouse** - Analytics database for FinOps data (optional)
-- **Langfuse SDK** - Tracing and observability
-- **RAGAS** - RAG evaluation metrics (faithfulness, relevance, correctness)
-- **Hypothesis** - Property-based testing framework
-- **asyncpg** - Async PostgreSQL driver
-- **Parlant** - Behavioral guidelines and routing with ensured compliance
-- **Agent Lightning** - Prompt optimization with RL-based tuning (optional)
-
-**Optional Components:**
-- **Cohere Rerank** - Document reranking (if quality improvement needed)
-- **DeepEval** - Automated quality evaluation (alternative to RAGAS)
-
-**Vector Database Options:**
-- **Primary:** PostgreSQL with pgvector extension (simplest integration)
-- **Alternatives:** Azure AI Search, Weaviate, Pinecone, Qdrant, FAISS
-
-**Infrastructure:**
-- **Docker & Docker Compose** - Containerization
-- **Azure** - Cloud platform (already using Azure OpenAI)
-- **GitHub Actions** - CI/CD pipeline
-
-**Observability:**
-- **Langfuse** - Distributed tracing, metrics, cost tracking
-- **OpenTelemetry** (optional) - Unified observability
-- **Custom dashboards** - Real-time agent monitoring
-
-**Evaluation Datasets:**
-- **BEIR** - Retrieval quality benchmarks
-- **Spider, UNITE, BIRD** - SQL generation benchmarks
-- **TruthfulQA, MT-Bench** - Generation quality benchmarks
-
-### Architecture Alignment with Current Codebase
-
-The design leverages the existing Microsoft Agent Framework architecture:
-
-**1. Agent Definition Pattern:**
-```python
-from agent_framework import ChatAgent, ChatClientProtocol, ai_function
-from agent_framework_ag_ui import AgentFrameworkAgent
-
-# Create specialized agent
-base_agent = ChatAgent(
-    name="intent_parser_agent",
-    instructions="You extract intent and entities from user queries...",
-    chat_client=chat_client,
-    tools=[parse_intent, extract_entities]
-)
-
-# Wrap for CopilotKit compatibility
-copilotkit_agent = AgentFrameworkAgent(
-    agent=base_agent,
-    name="IntentParserAgent",
-    description="Parses user intent with multi-step planning",
-    state_schema=INTENT_STATE_SCHEMA,
-    predict_state_config=INTENT_PREDICT_CONFIG
-)
-```
-
-**2. Tool Functions with `@ai_function`:**
-```python
-@ai_function(
-    name="parse_intent",
-    description="Extract intent and entities from user query with confidence scoring"
-)
-def parse_intent(
-    query: Annotated[str, Field(description="User's natural language query")],
-    context: Annotated[dict, Field(description="Conversation context")]
-) -> IntentResult:
-    """Parse intent using multi-step reasoning"""
-    # Implementation
-    return IntentResult(...)
-```
-
-**3. State Management for UI Sync:**
-```python
-STATE_SCHEMA = {
-    "intent": {
-        "type": "object",
-        "properties": {
-            "intent": {"type": "string"},
-            "entities": {"type": "object"},
-            "confidence": {"type": "number"}
-        }
-    },
-    "documents": {
-        "type": "array",
-        "items": {"type": "object"}
-    }
-}
-
-PREDICT_STATE_CONFIG = {
-    "intent": {
-        "tool": "parse_intent",
-        "tool_argument": "result"
-    }
-}
-```
-
-**4. FastAPI Integration:**
-```python
-from agent_framework_ag_ui import add_agent_framework_fastapi_endpoint
-
-app = FastAPI(title="MCP Multi-Agent RAG System")
-app.add_middleware(CORSMiddleware, allow_origins=["*"])
-
-# Add agent endpoint
-add_agent_framework_fastapi_endpoint(
-    app=app,
-    agent=my_agent,
-    path="/"
-)
-```
-
-**5. Chat Client Configuration:**
-```python
-from agent_framework.azure import AzureOpenAIChatClient
-from azure.identity import DefaultAzureCredential
-
-# Azure OpenAI (current setup)
-chat_client = AzureOpenAIChatClient(
-    credential=DefaultAzureCredential(),
-    deployment_name=os.getenv("AZURE_OPENAI_CHAT_DEPLOYMENT_NAME", "gpt-4o-mini"),
-    endpoint=os.getenv("AZURE_OPENAI_ENDPOINT")
-)
-
-# Or OpenAI
-from agent_framework.openai import OpenAIChatClient
-
-chat_client = OpenAIChatClient(
-    model_id=os.getenv("OPENAI_CHAT_MODEL_ID", "gpt-4o-mini"),
-    api_key=os.getenv("OPENAI_API_KEY")
-)
-```
-
-### Migration Path from Current Implementation
-
-**Phase 1: Core RAG Infrastructure (Weeks 1-2)**
-- Add `llama-index`, `pgvector`, `asyncpg` to `pyproject.toml`
-- Set up PostgreSQL with pgvector extension
-- Create document ingestion pipeline using LlamaIndex
-- Create Knowledge Retriever agent using `ChatAgent` pattern
-- Add retrieval tools with `@ai_function` decorator
-
-**Phase 2: Multi-Agent Coordination (Weeks 3-4)**
-- Create Intent Parser agent with advanced techniques
-- Create Answer Generator agent
-- Create Evaluator agent with RAGAS metrics
-- Coordinate agents via Microsoft Agent Framework
-- Update state schemas for multi-agent coordination
-
-**Phase 3: Parlant + CopilotKit HIL Integration (Weeks 5-6)**
-- Integrate Parlant SDK for behavioral guidelines
-- Define guidelines for all four phases (Discover, Define, Develop, Deliver)
-- Implement CopilotKit HIL intervention points
-- Add Six Thinking Hats prompting patterns
-- Create glossary terms and canned responses
-
-**Phase 4: Quality & Observability (Weeks 7-8)**
-- Integrate Langfuse SDK for tracing
-- Add RAGAS evaluation metrics
-- Implement Human Review workflow with approval mode
-- Add property-based tests with Hypothesis
-- Create evaluation dashboards
-
-**Phase 5: Advanced Features (Weeks 9-10)**
-- Add ClickHouse for analytics (optional)
-- Implement SQL generation with schema awareness
-- Add data story generation
-- Integrate Agent Lightning for prompt optimization (optional)
-- Performance optimization and caching
-
-### Key Design Decisions
-
-**1. Use Microsoft Agent Framework Native Patterns**
-- Leverage `ChatAgent` for all specialized agents
-- Use `@ai_function` for tool definitions
-- Use `AgentFrameworkAgent` wrapper for CopilotKit integration
-- Maintain compatibility with existing `agent.py` structure
-
-**2. Extend, Don't Replace**
-- Keep existing proverbs agent as example
-- Add new agents alongside existing ones
-- Reuse FastAPI app and CORS configuration
-- Maintain environment variable patterns
-
-**3. Incremental Complexity**
-- Start with simple retrieval (Phase 1)
-- Add multi-agent coordination (Phase 2)
-- Layer in quality evaluation (Phase 3)
-- Add advanced features last (Phase 4)
-
-**4. Maintain CopilotKit Compatibility**
-- All agents must work with CopilotKit UI
-- Use state schemas for UI synchronization
-- Support approval workflows for human-in-the-loop
-- Maintain AG-UI protocol compatibility
-
+---
+
+## 11. Future Enhancements
+
+### Phase 2 (Months 3-4)
+- **Multi-Modal RAG:** Support images, videos, audio in retrieval
+- **Graph RAG:** Knowledge graph integration for relationship queries
+- **Streaming Generation:** Token-by-token streaming for long answers
+- **Multi-Language:** Internationalization for queries and answers
+- **Advanced Personas:** Custom persona creation and management
+
+### Phase 3 (Months 5-6)
+- **Active Learning:** Intelligent sample selection for human review
+- **Federated Learning:** Privacy-preserving model updates
+- **Edge Deployment:** On-premise deployment for sensitive data
+- **Multi-Tenant:** Isolated environments for different organizations
+- **Advanced Analytics:** Predictive query routing, cost optimization
+
+---
+
+*Last Updated: 2025-01-24*
+*Version: 3.0 (Unified & Refined)*
