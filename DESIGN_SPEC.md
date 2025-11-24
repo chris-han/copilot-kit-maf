@@ -3,6 +3,15 @@
 ## Overview
 This document outlines the architecture for a Minimum Viable Product (MVP) that coordinates multiple agents using the MCP (Model Context Protocol) for complex task orchestration with RAG (Retrieval-Augmented Generation) capabilities.
 
+### Key Requirements
+1. **Integratability**: The system must support seamless integration capabilities including:
+   - Agent-to-Agent (A2A) integration using A2A protocol via both in-memory and HTTP communication channels
+   - Agent-to-Human integration via ag-ui protocol
+   - Factory/Adapter design patterns for pluggable integration design
+2. **Deterministic routing**: Clear routing mechanisms for query handling
+3. **Enforced compliance**: Policy enforcement and guardrails
+4. **Full observability**: Complete visibility into agent operations and decisions
+
 ## Architecture Overview
 ### Core values:
 Deterministic routing, enforced compliance, and full observability — the foundation of an enterprise‑grade solution.
@@ -100,6 +109,34 @@ MainAgent --> ParlantRouting
 ParlantRouting --> MCPServer
 
 ```
+
+### Integratability Requirements
+
+The system must support seamless integration capabilities with clearly defined protocols and design patterns:
+
+#### A2A (Agent-to-Agent) Integration
+- **Protocol**: Implement A2A protocol for agent communication
+- **Communication Channels**: Both in-memory and HTTP communication channels
+  - **In-Memory**: High-performance communication for agents within the same process
+  - **HTTP**: Inter-process and distributed agent communication
+- **Message Format**: Standardized message format supporting structured data exchange
+- **Discovery**: Agent registry for dynamic discovery of available agents
+- **Routing**: Intelligent routing mechanisms for directing messages between agents
+
+#### Agent-to-Human Integration
+- **Protocol**: Implement ag-ui protocol for agent-to-human interaction
+- **Interface Components**:
+  - Real-time notifications and feedback mechanisms
+  - Human review workflows with approval/rejection capabilities
+  - Interactive decision points for human-in-the-loop scenarios
+  - Context-rich interfaces with relevant information display
+
+#### Pluggable Integration Design
+- **Factory Pattern**: Implement factory design pattern for creating different types of integration adapters
+- **Adapter Pattern**: Implement adapter design pattern to enable seamless integration with diverse systems
+- **Plug-and-Play**: Support dynamic loading of integration modules without system restart
+- **Configuration-Driven**: Allow integration modules to be configured via external configuration files
+- **Extensibility**: Provide clear extension points for adding new integration capabilities
 
 ## Agent Orchestration Architecture
 
@@ -2194,6 +2231,26 @@ Audit]
 - **Spider, UNITE, BIRD** - SQL generation
 - **TruthfulQA, MT-Bench, Eval Harness** - Generation quality
 - **RAGAS metrics** - Faithfulness, relevance, correctness
+
+## Integration Architecture
+
+**Design Patterns:**
+- **Factory Pattern** - For creating different types of integration adapters based on configuration
+- **Adapter Pattern** - For enabling seamless integration with diverse external systems and protocols
+- **Strategy Pattern** - For selecting appropriate communication strategies (in-memory vs HTTP)
+- **Registry Pattern** - For agent discovery and management
+
+**Communication Protocols:**
+- **A2A Protocol** - Standardized agent-to-agent communication protocol
+- **ag-ui Protocol** - Agent-to-human interaction protocol
+- **HTTP/REST** - Inter-service communication
+- **In-Memory Communication** - High-performance intra-process communication
+
+**Integration Modules:**
+- **Dynamic Loading** - Support for plugin-style integration modules
+- **Configuration Management** - External configuration for integration modules
+- **Message Serialization** - Standardized message formats for inter-agent communication
+- **Service Discovery** - Mechanisms for agents to discover and communicate with each other
 
 ## RAG Characteristics Implementation
 

@@ -10,7 +10,7 @@ The architecture follows a modular design where each agent is an independent com
 
 ### System Overview
 
-The MCP-Based Multi-Agent RAG System is built on a layered architecture that separates concerns while enabling seamless coordination between components. The system leverages Microsoft Agent Framework for agent orchestration, CopilotKit for frontend integration, and a comprehensive observability stack for monitoring and continuous improvement.
+The MCP-Based Multi-Agent RAG System is built on a layered architecture that separates concerns while enabling seamless coordination between components. The system leverages Motia Framework for unified backend orchestration (APIs, workflows, and AI agents), CopilotKit for frontend integration, and a comprehensive observability stack for monitoring and continuous improvement.
 
 ### High-Level Architecture Diagram
 
@@ -38,17 +38,18 @@ The MCP-Based Multi-Agent RAG System is built on a layered architecture that sep
                               ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │                      Agent Orchestration Layer                      │
-│  ┌──────────────────────────────────────────────────────-────────┐  │
-│  │              Microsoft Agent Framework                        │  │
+│  ┌───────────────────────────────────────────────────────────────┐  │
+│  │                    Motia Framework                            │  │
 │  │  ┌────────────┐  ┌────────────┐  ┌────────────┐               │  │
 │  │  │Orchestrator│  │   Intent   │  │ Knowledge  │               │  │
-│  │  │   Agent    │──│   Parser   │──│ Retriever  │               │  │
+│  │  │   Step     │──│   Parser   │──│ Retriever  │               │  │
 │  │  └────────────┘  └────────────┘  └────────────┘               │  │
 │  │         │              │                  │                   │  │
 │  │         ▼              ▼                  ▼                   │  │
 │  │  ┌────────────┐  ┌────────────┐  ┌────────────┐               │  │
 │  │  │  Answer    │  │ Evaluator  │  │   Human    │               │  │
 │  │  │ Generator  │──│   Agent    │──│   Review   │               │  │
+│  │  │   Step     │  │   Step     │  │   Step     │               │  │
 │  │  └────────────┘  └────────────┘  └────────────┘               │  │
 │  └──────────────────────────────────────────────────────-────────┘  │
 └─────────────────────────────────────────────────────────────────────┘
@@ -75,7 +76,7 @@ The MCP-Based Multi-Agent RAG System is built on a layered architecture that sep
 ┌─────────────────────────────────────────────────────────────────────┐
 │                         Storage Layer                               │
 │  ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌────────────┐     │
-│  │PostgreSQL  │  │  pgvector  │  │ ClickHouse │  │   Redis    │     │
+│  │PostgreSQL  │  │  Weaviate  │  │ ClickHouse │  │   Redis    │     │
 │  │  Database  │  │  Vectors   │  │ (optional) │  │   Cache    │     │
 │  └────────────┘  └────────────┘  └────────────┘  └────────────┘     │
 └─────────────────────────────────────────────────────────────────────┘
@@ -96,44 +97,44 @@ The system uses a **hybrid orchestration approach** combining two complementary 
 - **Deliver Phase**: CoT for evaluation (Black/Blue Hats)
 
 ```
-┌────────────────────────────────────────────────────────────────┐
-│                    ORCHESTRATOR (Plan-and-Execute)             │
-│                                                                │
-│  Step 1: PLAN                                                  │
+┌─────────────────────────────────────────────────────────────────┐
+│                    ORCHESTRATOR (Plan-and-Execute)               │
+│                                                                  │
+│  Step 1: PLAN                                                   │
 │  ┌────────────────────────────────────────────────────────┐    │
-│  │ Analyze query → Create execution plan                  │    │
-│  │ • Parse intent and entities                            │    │
-│  │ • Determine agent sequence                             │    │
-│  │ • Identify dependencies                                │    │
-│  │ • Allocate resources                                   │    │
+│  │ Analyze query → Create execution plan                   │    │
+│  │ • Parse intent and entities                             │    │
+│  │ • Determine agent sequence                              │    │
+│  │ • Identify dependencies                                 │    │
+│  │ • Allocate resources                                    │    │
 │  └────────────────────────────────────────────────────────┘    │
-│                          │                                     │
-│                          ▼                                     │
-│  Step 2: EXECUTE (Parallel where possible)                     │
+│                          │                                       │
+│                          ▼                                       │
+│  Step 2: EXECUTE (Parallel where possible)                      │
 │  ┌────────────────────────────────────────────────────────┐    │
-│  │                                                        │    │
-│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │    │
-│  │  │ Intent Parser│  │   Parlant    │  │  Knowledge   │  │    │
-│  │  │    Agent     │→ │   Routing    │→ │  Retriever   │  │    │
-│  │  │   (ReAct)    │  │ (Rule-based) │  │   (ReAct)    │  │    │
-│  │  └──────────────┘  └──────────────┘  └──────────────┘  │    │
-│  │                                              │         │    │
-│  │                                              ▼         │    │
-│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │    │
-│  │  │    Human     │  │  Evaluator   │  │   Answer     │  │    │
-│  │  │   Review     │← │    Agent     │← │  Generator   │  │    │
-│  │  │   (Manual)   │  │   (ReAct)    │  │   (ReAct)    │  │    │
-│  │  └──────────────┘  └──────────────┘  └──────────────┘  │    │
-│  │                                                        │    │
+│  │                                                         │    │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐ │    │
+│  │  │ Intent Parser│  │   Parlant    │  │  Knowledge   │ │    │
+│  │  │    Agent     │→ │   Routing    │→ │  Retriever   │ │    │
+│  │  │   (ReAct)    │  │ (Rule-based) │  │   (ReAct)    │ │    │
+│  │  └──────────────┘  └──────────────┘  └──────────────┘ │    │
+│  │                                              │          │    │
+│  │                                              ▼          │    │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐ │    │
+│  │  │    Human     │  │  Evaluator   │  │   Answer     │ │    │
+│  │  │   Review     │← │    Agent     │← │  Generator   │ │    │
+│  │  │   (Manual)   │  │   (ReAct)    │  │   (ReAct)    │ │    │
+│  │  └──────────────┘  └──────────────┘  └──────────────┘ │    │
+│  │                                                         │    │
 │  └────────────────────────────────────────────────────────┘    │
-│                          │                                     │
-│                          ▼                                     │
-│  Step 3: AGGREGATE & RETURN                                    │
+│                          │                                       │
+│                          ▼                                       │
+│  Step 3: AGGREGATE & RETURN                                     │
 │  ┌────────────────────────────────────────────────────────┐    │
-│  │ Collect results → Validate → Return answer             │    │
+│  │ Collect results → Validate → Return answer              │    │
 │  └────────────────────────────────────────────────────────┘    │
-│                                                                │
-└────────────────────────────────────────────────────────────────┘
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 **Pattern Selection Rationale:**
@@ -979,75 +980,24 @@ async def execute_rag_pipeline(query: str, user_id: str) -> Answer:
 
 ## Components and Interfaces
 
-### 1. Orchestrator Agent (Plan-and-Execute with MAF Swarm)
+### 1. Orchestrator Agent (Plan-and-Execute)
 
-**Responsibility**: High-level coordination using Plan-and-Execute pattern. Creates execution plan based on parsed intent and coordinates agents using **MAF Swarm** for execution.
-
-**Pattern**: Plan-and-Execute at orchestration level + MAF Swarm for agent handoffs
-
-**Architecture:**
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    PLAN PHASE (Orchestrator)                 │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │ 1. Intent Parser → IntentResult (multi-step planning)│  │
-│  │ 2. Create execution plan based on intent complexity  │  │
-│  │ 3. Build handoff sequence for MAF Swarm             │  │
-│  │ • Determine which agents needed                      │  │
-│  │ • Identify dependencies between tasks                │  │
-│  │ • Generate handoff sequence (e.g., retriever →       │  │
-│  │   generator → evaluator)                            │  │
-│  └──────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                  EXECUTE PHASE (MAF Swarm)                   │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │ Intent Parser → HandoffMessage →                    │  │
-│  │ (ReAct pattern internally for parsing)              │  │
-│  │                                                      │  │
-│  │    ↓                                                 │  │
-│  │                                                      │  │
-│  │ Knowledge Retriever → HandoffMessage →            │  │
-│  │ (ReAct pattern internally for retrieval)            │  │
-│  │                                                      │  │
-│  │    ↓                                                 │  │
-│  │                                                      │  │
-│  │ Answer Generator → HandoffMessage →               │  │
-│  │ (Chain-of-Thought pattern for synthesis)           │  │
-│  │                                                      │  │
-│  │    ↓                                                 │  │
-│  │                                                      │  │
-│  │ Evaluator → Final answer (no handoff)              │  │
-│  │ (Chain-of-Thought pattern for quality check)       │  │
-│  └──────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                  AGGREGATE PHASE (Orchestrator)              │
-│  Collect results → Validate → Return answer with metadata  │
-└─────────────────────────────────────────────────────────────┘
-```
+**Responsibility**: High-level coordination using Plan-and-Execute pattern. Creates execution plan, manages agent dependencies, and aggregates results.
 
 **Interface**:
 ```python
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from enum import Enum
-from autogen_agentchat.teams import Swarm
-from autogen_agentchat.agents import AssistantAgent
-from autogen_agentchat.messages import HandoffMessage
-from autogen_core import AgentRuntime, SingleThreadedAgentRuntime
 
 class AgentTask(Enum):
     """Agent tasks in execution plan"""
-    PARSE_INTENT = "parse_intent"  # Intent Parser (ReAct)
-    ROUTE_QUERY = "route_query"    # Parlant Router (Rule-based)
-    RETRIEVE_KNOWLEDGE = "retrieve_knowledge"  # Knowledge Retriever (ReAct)
-    GENERATE_ANSWER = "generate_answer"        # Answer Generator (CoT)
-    EVALUATE_QUALITY = "evaluate_quality"      # Evaluator (CoT)
+    PARSE_INTENT = "parse_intent"
+    ROUTE_QUERY = "route_query"
+    RETRIEVE_KNOWLEDGE = "retrieve_knowledge"
+    GENERATE_ANSWER = "generate_answer"
+    EVALUATE_QUALITY = "evaluate_quality"
+    REQUEST_REVIEW = "request_review"
 
 @dataclass
 class ExecutionPlan:
@@ -1056,9 +1006,6 @@ class ExecutionPlan:
     dependencies: Dict[AgentTask, List[AgentTask]]  # Task → prerequisite tasks
     parallel_groups: List[List[AgentTask]]  # Tasks that can run in parallel
     estimated_duration_ms: int
-    handoff_sequence: List[str]  # Agent names for MAF Swarm execution
-    query_complexity: str  # "simple", "moderate", "complex"
-    reasoning: str  # Why this plan was chosen
 
 @dataclass
 class ExecutionContext:
@@ -1066,122 +1013,63 @@ class ExecutionContext:
     query: str
     user_id: str
     conversation_context: Optional[ConversationContext] = None
-    plan: Optional[ExecutionPlan] = None
-
-    # Results from each agent (collected from Swarm execution)
+    
+    # Results from each agent
     intent: Optional[IntentResult] = None
     routing_decision: Optional[RoutingDecision] = None
     retrieved_documents: Optional[List[Document]] = None
     generated_answer: Optional[Answer] = None
     evaluation: Optional[EvaluationResult] = None
+    review_result: Optional[ReviewFeedback] = None
 
-class OrchestratorAgent(AssistantAgent):
-    """
-    Plan-and-Execute orchestrator for high-level agent coordination.
-    Uses MAF Swarm for execution to leverage built-in handoff mechanism.
-    Intent Parser is the entry point, which hands off to Orchestrator.
-    """
-
-    def __init__(
-        self,
-        runtime: AgentRuntime,
-        swarm: Swarm,
-        name: str = "orchestrator"
-    ) -> None:
-        super().__init__(name=name)
+class OrchestratorAgent(RoutedAgent):
+    """Plan-and-Execute orchestrator for high-level agent coordination using Microsoft Agent Framework"""
+    
+    def __init__(self, runtime: AgentRuntime) -> None:
+        super().__init__("Orchestrator Agent")
         self.runtime = runtime
-        self.swarm = swarm
-        self.agents: Dict[str, AssistantAgent] = {
-            agent.name: agent for agent in swarm._participants
-        }
-
+        # Agent instances are managed by runtime, not directly instantiated
+        # Communication happens via message passing through runtime
+    
     async def process_query(self, query: str, user_id: str) -> Answer:
         """
         Main Plan-and-Execute workflow:
-        1. PLAN: Intent Parser → IntentResult → Orchestrator creates plan
-        2. EXECUTE: Use MAF Swarm for agent handoffs (saves ~80% orchestration code)
-        3. AGGREGATE: Collect and validate results from Swarm execution
+        1. PLAN: Analyze query and create execution plan
+        2. EXECUTE: Run agents according to plan (parallel where possible)
+        3. AGGREGATE: Collect and validate results
         """
-        # Step 1: PLAN - Parse intent first (may have been done by Intent Parser)
+        # Step 1: PLAN
         context = ExecutionContext(query=query, user_id=user_id)
-
-        # If intent not already parsed, parse it
-        if not context.intent:
-            context.intent = await self.parse_intent(query, context)
-
-        # Create execution plan based on parsed intent
-        execution_plan = await self.create_plan(context.intent, context)
-        context.plan = execution_plan
-
-        # Log plan to Langfuse for observability
-        await self.log_plan(execution_plan, context)
-
-        # Step 2: EXECUTE using MAF Swarm
-        # Each agent returns HandoffMessage, Swarm runtime handles the routing
-        # Intent Parser already ran, so start from Knowledge Retriever
-        final_result = await self.execute_with_swarm(execution_plan, context)
-
+        plan = await self.create_plan(query, context)
+        
+        # Log plan to Langfuse
+        await self.log_plan(plan, context)
+        
+        # Step 2: EXECUTE
+        await self.execute_plan(plan, context)
+        
         # Step 3: AGGREGATE & RETURN
-        return await self.aggregate_results(final_result, context)
-
-    async def parse_intent(self, query: str, context: ExecutionContext) -> IntentResult:
+        return await self.aggregate_results(context)
+    
+    async def create_plan(self, query: str, context: ExecutionContext) -> ExecutionPlan:
         """
-        Parse intent if not already done by Intent Parser agent.
-        This is the entry point from Intent Parser handoff.
+        PLAN phase: Analyze query and create execution plan
+        
+        Determines:
+        - Which agents to call
+        - In what order
+        - Which can run in parallel
+        - Dependencies between tasks
         """
-        intent_parser = self.agents["intent_parser"]
-
-        # Use MAF message passing to parse intent
-        response = await self.runtime.send_message(
-            IntentParseRequest(
-                query=query,
-                user_id=context.user_id,
-                conversation_context=context.conversation_context
-            ),
-            AgentId("intent_parser", "default")
-        )
-
-        return response
-
-    async def create_plan(
-        self,
-        intent_result: IntentResult,
-        context: ExecutionContext
-    ) -> ExecutionPlan:
-        """
-        PLAN phase: Create execution plan based on parsed intent
-
-        For complex queries with multi-step planning, creates detailed plan.
-        For simple queries, uses standard RAG pipeline sequence.
-        """
-        # Create execution plan based on intent complexity
-        if intent_result.abstract_intent.requires_multi_step:
-            # Complex query: Use multi-step plan from sub-intents
-            execution_plan = await self.create_multi_step_plan(
-                intent_result, context
-            )
-        else:
-            # Simple query: Standard RAG pipeline plan
-            execution_plan = await self.create_standard_plan(
-                intent_result, context
-            )
-
-        return execution_plan
-
-    async def create_standard_plan(
-        self,
-        intent_result: IntentResult,
-        context: ExecutionContext
-    ) -> ExecutionPlan:
-        """Create standard RAG pipeline plan for simple queries"""
+        # Standard RAG pipeline plan
         tasks = [
-            AgentTask.PARSE_INTENT,  # Already done, but included for completeness
+            AgentTask.PARSE_INTENT,
             AgentTask.ROUTE_QUERY,
             AgentTask.RETRIEVE_KNOWLEDGE,
             AgentTask.GENERATE_ANSWER,
             AgentTask.EVALUATE_QUALITY
         ]
-
+        
         # Define dependencies (sequential by default)
         dependencies = {
             AgentTask.PARSE_INTENT: [],
@@ -1190,171 +1078,158 @@ class OrchestratorAgent(AssistantAgent):
             AgentTask.GENERATE_ANSWER: [AgentTask.RETRIEVE_KNOWLEDGE],
             AgentTask.EVALUATE_QUALITY: [AgentTask.GENERATE_ANSWER]
         }
-
+        
         # No parallel groups in standard pipeline (sequential)
         parallel_groups = []
-
-        # Handoff sequence for MAF Swarm
-        # Intent Parser already ran, so start from Knowledge Retriever
-        handoff_sequence = [
-            "knowledge_retriever",
-            "answer_generator",
-            "evaluator"
-        ]
-
-        # Add reasoning for observability
-        reasoning = f"Standard RAG pipeline for {intent_result.query_type.value} query type"
-
+        
         return ExecutionPlan(
             tasks=tasks,
             dependencies=dependencies,
             parallel_groups=parallel_groups,
-            estimated_duration_ms=2000,
-            handoff_sequence=handoff_sequence,
-            query_complexity=intent_result.abstract_intent.complexity,
-            reasoning=reasoning
+            estimated_duration_ms=2000
         )
-
-    async def create_multi_step_plan(
-        self,
-        intent_result: IntentResult,
-        context: ExecutionContext
-    ) -> ExecutionPlan:
-        """Create multi-step plan for complex queries with sub-intents"""
-        tasks = []
-        dependencies = {}
-        handoff_sequence = []
-
-        # Flatten sub-intents into execution plan
-        for sub_intent in intent_result.sub_intents:
-            task = AgentTask(sub_intent.intent)
-            tasks.append(task)
-
-            # Map dependencies
-            dependencies[task] = [
-                AgentTask(intent_result.sub_intents[dep-1].intent)
-                for dep in sub_intent.dependencies
-            ]
-
-            # Build handoff sequence (flattened for now, could optimize)
-            handoff_sequence.append(f"{sub_intent.intent}_agent")
-
-        # Add final evaluation
-        tasks.append(AgentTask.EVALUATE_QUALITY)
-        dependencies[AgentTask.EVALUATE_QUALITY] = tasks[:-1]
-        handoff_sequence.append("evaluator")
-
-        # Add reasoning for observability
-        reasoning = f"Multi-step plan for complex query with {len(tasks)} sub-tasks"
-
-        return ExecutionPlan(
-            tasks=tasks,
-            dependencies=dependencies,
-            parallel_groups=[],  # Could detect parallelizable tasks
-            estimated_duration_ms=5000,  # Longer for multi-step
-            handoff_sequence=handoff_sequence,
-            query_complexity="complex",
-            reasoning=reasoning
-        )
-
-    async def execute_with_swarm(
-        self,
-        execution_plan: ExecutionPlan,
-        context: ExecutionContext
-    ) -> Dict[str, Any]:
+    
+    async def execute_plan(self, plan: ExecutionPlan, context: ExecutionContext) -> None:
         """
-        EXECUTE phase: Use MAF Swarm for agent coordination
-
-        Each agent returns HandoffMessage, Swarm runtime handles routing.
-        This eliminates ~80% of custom orchestration code.
-
-        Intent Parser is not in handoff_sequence since it already ran.
+        EXECUTE phase: Run agents according to plan
+        
+        Executes tasks respecting dependencies.
+        Each agent uses ReAct internally for its specific job.
         """
-        # Prepare initial message with all context
-        # Intent Parser already ran in planning phase, so start from first agent
-        first_agent = execution_plan.handoff_sequence[0]
-
-        # Create initial HandoffMessage
-        initial_message = HandoffMessage(
-            source="orchestrator",
-            target=first_agent,
-            content={
-                "query": context.query,
-                "user_id": context.user_id,
-                "intent": context.intent,
-                "routing_decision": context.routing_decision,
-                "conversation_context": context.conversation_context
-            }
-        )
-
-        # Execute Swarm - agents hand off to each other automatically
-        # Each agent processes and returns HandoffMessage to next agent
-        final_result = await self.swarm.run(initial_message)
-
-        # Extract results from Swarm execution context
-        return self._extract_results_from_swarm(final_result)
-
-    def _extract_results_from_swarm(self, swarm_result: Any) -> Dict[str, Any]:
-        """Extract agent results from Swarm execution"""
-        # MAF Swarm provides accumulated context with all agent outputs
-        conversation = swarm_result
-
-        # Extract from conversation's context or message history
-        # Implementation depends on Swarm's exact result format
-        context = {}
-        for message in conversation.messages:
-            if hasattr(message, 'content') and isinstance(message.content, dict):
-                context.update(message.content)
-
-        return {
-            "retrieved_documents": context.get("retrieved_documents", []),
-            "generated_answer": context.get("generated_answer", None),
-            "evaluation": context.get("evaluation", None)
-        }
-
-    async def aggregate_results(
+        for task in plan.tasks:
+            # Check dependencies are satisfied
+            await self.wait_for_dependencies(task, plan.dependencies, context)
+            
+            # Execute task (agent uses ReAct internally)
+            await self.execute_task(task, context)
+            
+            # Log task completion
+            await self.log_task_completion(task, context)
+    
+    async def execute_task(self, task: AgentTask, context: ExecutionContext) -> None:
+        """
+        Execute a single agent task
+        
+        Each agent uses appropriate pattern internally for its specific job.
+        Orchestrator sends messages to agents via Microsoft Agent Framework runtime.
+        
+        Note: Runtime enables flexible deployment:
+        - SingleThreadedAgentRuntime: Direct method calls (high performance, single process)
+        - GrpcWorkerAgentRuntime: gRPC calls (distributed, multi-process)
+        """
+        try:
+            if task == AgentTask.PARSE_INTENT:
+                # Send message to Intent Parser Agent via runtime
+                response = await self.runtime.send_message(
+                    IntentParseRequest(
+                        query=context.query,
+                        user_id=context.user_id,
+                        conversation_context=context.conversation_context
+                    ),
+                    AgentId("intent_parser", "default")
+                )
+                context.intent = response
+            
+            elif task == AgentTask.ROUTE_QUERY:
+                # Parlant uses rule-based routing (no ReAct needed)
+                context.routing_decision = await self.router.route(
+                    context.query,
+                    context.intent
+                )
+            
+            elif task == AgentTask.RETRIEVE_KNOWLEDGE:
+                # Knowledge Retriever uses ReAct internally for multi-strategy retrieval
+                context.retrieved_documents = await self.retriever.retrieve(
+                    context.query,
+                    context.intent,
+                    context.routing_decision
+                )
+            
+            elif task == AgentTask.GENERATE_ANSWER:
+                # Answer Generator uses ReAct internally for iterative context assembly
+                context.generated_answer = await self.generator.generate(
+                    context.query,
+                    context.retrieved_documents,
+                    context.intent
+                )
+            
+            elif task == AgentTask.EVALUATE_QUALITY:
+                # Evaluator uses ReAct internally for multi-metric evaluation
+                context.evaluation = await self.evaluator.evaluate(
+                    context.query,
+                    context.retrieved_documents,
+                    context.generated_answer
+                )
+                
+                # If quality is low, add review task dynamically
+                if context.evaluation.needs_review:
+                    context.review_result = await self.reviewer.request_review(
+                        context.generated_answer,
+                        context.evaluation
+                    )
+        
+        except Exception as e:
+            await self.handle_task_failure(task, e, context)
+    
+    async def wait_for_dependencies(
         self,
-        final_result: Dict[str, Any],
+        task: AgentTask,
+        dependencies: Dict[AgentTask, List[AgentTask]],
         context: ExecutionContext
-    ) -> Answer:
+    ) -> None:
+        """Wait for prerequisite tasks to complete"""
+        # In sequential execution, this is a no-op
+        # In parallel execution, would wait for dependency tasks
+        pass
+    
+    async def aggregate_results(self, context: ExecutionContext) -> Answer:
         """
-        AGGREGATE phase: Collect and validate results from Swarm execution
-
+        AGGREGATE phase: Collect and validate results
+        
         Returns final answer with all metadata.
         """
-        generated_answer = final_result.get("generated_answer")
-        evaluation = final_result.get("evaluation")
-
-        if not generated_answer:
+        if not context.generated_answer:
             return self.create_fallback_answer(context)
-
-        # Add evaluation metadata
-        if evaluation:
-            generated_answer.provenance["evaluation"] = {
-                "overall_score": evaluation.overall_score,
-                "faithfulness": evaluation.faithfulness,
-                "relevance": evaluation.relevance,
-                "coverage": evaluation.coverage,
-                "needs_review": evaluation.needs_review
-            }
-
-        return generated_answer
-
+        
+        # Add evaluation metadata to answer
+        context.generated_answer.provenance["evaluation"] = {
+            "overall_score": context.evaluation.overall_score,
+            "faithfulness": context.evaluation.faithfulness,
+            "relevance": context.evaluation.relevance
+        }
+        
+        return context.generated_answer
+    
+    async def handle_task_failure(
+        self,
+        task: AgentTask,
+        error: Exception,
+        context: ExecutionContext
+    ) -> None:
+        """
+        Handle task failures with retry logic
+        
+        Implements exponential backoff and fallback strategies.
+        """
+        # Log error to Langfuse
+        await self.log_error(task, error, context)
+        
+        # Retry logic or fallback
+        # For now, raise to fail fast
+        raise
+    
     async def log_plan(self, plan: ExecutionPlan, context: ExecutionContext) -> None:
         """Log execution plan to Langfuse"""
-        with langfuse.trace("query_planning") as trace:
-            trace.span(
-                "execution_plan_generation",
-                input={"query": context.query, "intent": context.intent.intent},
-                output={
-                    "tasks": [task.value for task in plan.tasks],
-                    "handoff_sequence": plan.handoff_sequence,
-                    "estimated_duration_ms": plan.estimated_duration_ms,
-                    "complexity": plan.query_complexity,
-                    "reasoning": plan.reasoning
-                }
-            )
-
+        pass
+    
+    async def log_task_completion(self, task: AgentTask, context: ExecutionContext) -> None:
+        """Log task completion to Langfuse"""
+        pass
+    
+    async def log_error(self, task: AgentTask, error: Exception, context: ExecutionContext) -> None:
+        """Log errors to Langfuse"""
+        pass
+    
     def create_fallback_answer(self, context: ExecutionContext) -> Answer:
         """Create fallback answer when execution fails"""
         return Answer(
@@ -1363,87 +1238,21 @@ class OrchestratorAgent(AssistantAgent):
             confidence=0.0,
             model_used="fallback",
             generation_time_ms=0,
-            provenance={
-                "reason": "execution_failed",
-                "plan": context.plan.__dict__ if context.plan else None
-            }
+            provenance={"reason": "execution_failed"}
         )
 ```
 
-**Benefits of MAF Swarm Orchestration:**
+**Plan-and-Execute Benefits:**
 
-1. **Massive Code Reduction**: ~80% less orchestration code (MAF handles handoffs)
-2. **Production-Tested**: Microsoft built and tested Swarm transitions
-3. **Built-in Observability**: MAF automatically traces agent handoffs
-4. **Error Handling**: Automatic retry and failure recovery
-5. **Type Safety**: Pydantic-based message passing ensures correctness
-6. **Flexible Deployment**: Works with both SingleThreadedAgentRuntime and GrpcWorkerAgentRuntime
+1. **Clear Structure**: Explicit execution plan with dependencies
+2. **Predictable**: Same workflow for similar queries
+3. **Parallelizable**: Can run independent tasks concurrently
+4. **Monitorable**: Track progress through plan stages
+5. **Composable**: Easy to add/remove agents from pipeline
 
-**How Swarm Execution Works:**
+**Note**: Each agent called by the orchestrator uses **ReAct internally** for its specific job (e.g., Knowledge Retriever uses ReAct to try multiple retrieval strategies).
 
-```python
-# Intent Parser Agent (entry point) hands off to Orchestrator
-class IntentParserAgent(AssistantAgent):
-    async def on_messages(self, messages, cancellation_token):
-        query = messages[-1].content
-        intent = await self.parse_intent(query)
-
-        # Hand off to Orchestrator for planning & execution
-        return HandoffMessage(
-            source=self.name,
-            target="orchestrator",
-            content={"intent": intent, "query": query}
-        )
-
-# Orchestrator receives handoff and plans execution
-class OrchestratorAgent(AssistantAgent):
-    async def on_messages(self, messages, cancellation_token):
-        # Extract intent from Intent Parser
-        intent = messages[-1].content["intent"]
-        query = messages[-1].content["query"]
-
-        # Create execution plan
-        execution_plan = await self.create_plan(intent)
-
-        # Execute using Swarm
-        result = await self.execute_with_swarm(execution_plan)
-
-        # Return final answer to user
-        return result
-
-# Knowledge Retriever Agent used by Swarm
-class KnowledgeRetrieverAgent(AssistantAgent):
-    async def on_messages(self, messages, cancellation_token):
-        # Extract context from previous agent (Orchestrator)
-        intent = messages[-1].content["intent"]
-        query = messages[-1].content["query"]
-
-        # Use ReAct internally for multi-strategy retrieval
-        documents = await self.retrieve_with_react(query, intent)
-
-        # Hand off to Answer Generator
-        return HandoffMessage(
-            source=self.name,
-            target="answer_generator",
-            content={
-                "intent": intent,
-                "query": query,
-                "documents": documents
-            }
-        )
-
-# Swarm automatically routes messages between agents
-# Each agent uses its internal pattern (ReAct or CoT) for its specific task
-```
-
-**Workflow:**
-1. **Intent Parser** parses query → **hands off to Orchestrator**
-2. **Orchestrator** creates execution plan → **uses Swarm to execute**
-3. **Swarm** orchestrates agents: Knowledge Retriever → Generator → Evaluator
-4. **Each agent** uses internal pattern (ReAct or CoT) for its job
-5. **Orchestrator** aggregates results and returns final answer
-
-**Dependencies**: Intent Parser Agent (ReAct), Parlant Router (Rule-based), Knowledge Retriever Agent (ReAct), Answer Generator Agent (Chain-of-Thought), Evaluator Agent (Chain-of-Thought)
+**Dependencies**: Intent Parser Agent (ReAct), Parlant Router (Rule-based), Knowledge Retriever Agent (ReAct), Answer Generator Agent (ReAct), Evaluator Agent (ReAct), Human Review Agent (Manual)
 
 ### 2. Intent Parser Agent
 
@@ -1770,8 +1579,6 @@ result = await intent_parser.parse_intent(query, context)
 **Supported Vector Stores**:
 - PostgreSQL + pgvector (default, simplest setup)
 - Weaviate (production-grade, cloud-native)
-- Pinecone (managed service)
-- Qdrant (high-performance)
 - Azure AI Search (Azure-native)
 
 **Adapter Interface**:
@@ -1783,7 +1590,7 @@ from pydantic import BaseModel
 
 class VectorStoreConfig(BaseModel):
     """Configuration for vector store"""
-    provider: str  # "pgvector", "weaviate", "pinecone", "qdrant", "azure_ai_search"
+    provider: str  # "weaviate", "azure_ai_search"
     connection_string: str
     index_name: str
     embedding_dimension: int = 1536
@@ -2094,7 +1901,7 @@ class VectorStoreFactory:
     """Factory for creating vector store adapters"""
     
     _adapters = {
-        "pgvector": PgVectorAdapter,
+        # "pgvector": PgVectorAdapter,
         "weaviate": WeaviateAdapter,
         # Add more as needed
         # "pinecone": PineconeAdapter,
@@ -2151,386 +1958,479 @@ weaviate:
 # VECTOR_STORE_PROVIDER=pgvector
 ```
 
-### 3.5. Agent Runtime Configuration (Microsoft Agent Framework)
+### 3.5. Agent Runtime Configuration (A2A Protocol + Motia Integration)
 
-**Design Philosophy**: Leverage Microsoft Agent Framework's built-in runtime abstraction for flexible deployment - SingleThreadedAgentRuntime for single-process or GrpcWorkerAgentRuntime for distributed deployments.
+**Design Philosophy**: Combine **A2A Protocol compliance** with **Motia's native queue system** for agent-to-agent communication - no HTTP needed, full ecosystem interoperability.
 
-**Supported Runtime Modes**:
-- SingleThreadedAgentRuntime (default, high-performance for single-process)
-- GrpcWorkerAgentRuntime (distributed, multi-process communication via gRPC)
+**The Magic: A2A + Motia Integration**
 
-**Microsoft Agent Framework Runtime Interface**:
+```
+A2A Protocol           Motia Queue System
+─────────────         ──────────────────
+AgentCard       ←→    Agent Registry (State)
+RequestContext  ←→    Motia Event Input
+ExecutionEventBus ←→  Motia context.emit()
+AgentExecutor   ←→    Event Step Handler
+```
+
+**Key Components**
+
+**1. MotiaA2AAgent Wrapper**
+- Wraps any A2A `AgentExecutor`
+- Converts Motia events → A2A `RequestContext`
+- Converts A2A results → Motia events
+- Maintains full A2A protocol compliance
+
+**2. MotiaEventBus**
+- Implements A2A's `ExecutionEventBus` interface
+- Routes A2A events through Motia's `context.emit()`
+- A2A thoughts/actions become Motia events
+- All automatically queued by Motia
+
+**3. Event-Driven Communication**
+```python
+# No HTTP calls - just Motia events
+context.emit('agent.task.researcher_a2a', {
+    'action': 'execute_task',
+    'query': 'AI trends'
+})
+
+# Motia automatically queues this
+# A2A agent receives and processes
+# Results emitted back through Motia queues
+```
+
+**Benefits of A2A-Motia Integration**
+
+### ✅ Full A2A Compliance
+- Uses real `AgentCard`, `RequestContext`, `ExecutionEventBus`
+- A2A agents work exactly as specified
+- Can emit thoughts, actions, progress updates
+- Compatible with A2A ecosystem
+
+### ✅ Motia's Native Features
+- Automatic queuing - no Redis/HTTP setup
+- Built-in retry and fault tolerance
+- Shared state across agents
+- Real-time observability in Workbench
+- Multi-language support
+
+### ✅ Better Performance
+- No HTTP overhead
+- No network latency
+- No port conflicts
+- No connection pooling needed
+
+### ✅ Simpler Operations
+- One runtime (Motia)
+- One deployment
+- No separate A2A servers
+- No service discovery needed
+
+**A2A Events Flow Through Motia**
+
+```
+A2A Agent emits:           Motia queues as:
+─────────────────         ───────────────────
+thought("Planning...") →  'a2a.thought' event
+action("web_search") →    'a2a.action' event
+progress(0.5, "Working") → 'agent.progress' event
+result({...}) →           'task.completed' event
+```
+
+All these events:
+- Are automatically queued by Motia
+- Visible in Workbench
+- Can be subscribed to by other Steps
+- Have built-in retry logic
+
+**Design Philosophy**: Use Motia's built-in runtime and queue system for all agent communication. No complex runtime abstractions needed - Motia handles distribution, messaging, and orchestration automatically through its event system.
+
+**Key Runtime Features**:
+- Automatic event routing based on `subscribes`/`emits` declarations
+- Built-in queue management (no external brokers)
+- Automatic retry and fault tolerance
+- Scalable by default through Motia's architecture
+
+**Agent Implementation Using A2A Protocol + Motia Integration**:
+
+**1. Example Agent with A2A + Motia Integration:**
 
 ```python
-from autogen_core import (
-    AgentRuntime,
-    SingleThreadedAgentRuntime,
-    RoutedAgent,
-    MessageContext,
-    message_handler
+from motia import step
+from typing import Any, Dict, Optional
+from enum import Enum
+
+class QueryType(str, Enum):
+    """Query classification types"""
+    FACTUAL = "factual"
+    ANALYTICAL = "analytical"
+    CREATIVE = "creative"
+    COMPARATIVE = "comparative"
+
+@step(
+    name="IntentParser",
+    emits=["intent.parsed"],  # Emits structured intent data
+    subscribes=["query.received"]  # Subscribes to incoming queries
 )
-from autogen_ext.runtimes.grpc import GrpcWorkerAgentRuntime, GrpcWorkerAgentRuntimeHost
-from typing import Literal
-from pydantic import BaseModel
+async def intent_parser_handler(event: Dict[str, Any], context) -> Dict[str, Any]:
+    """
+    A2A Intent Parser Agent - wrapped by MotiaA2AAgent
 
-class RuntimeConfig(BaseModel):
-    """Configuration for agent runtime"""
-    mode: Literal["single_threaded", "grpc_distributed"] = "single_threaded"
-    grpc_host_address: str = "localhost:50051"  # For distributed mode
-    
-class RuntimeFactory:
-    """Factory for creating agent runtimes using Microsoft Agent Framework"""
-    
-    @staticmethod
-    async def create_runtime(config: RuntimeConfig) -> AgentRuntime:
-        """Create appropriate runtime based on configuration"""
-        if config.mode == "single_threaded":
-            return SingleThreadedAgentRuntime()
-        elif config.mode == "grpc_distributed":
-            runtime = GrpcWorkerAgentRuntime(host_address=config.grpc_host_address)
-            await runtime.start()
-            return runtime
-        else:
-            raise ValueError(f"Unknown runtime mode: {config.mode}")
-    
-    @staticmethod
-    def from_env() -> RuntimeConfig:
-        """Create runtime config from environment variables"""
-        import os
-        return RuntimeConfig(
-            mode=os.getenv("AGENT_RUNTIME_MODE", "single_threaded"),
-            grpc_host_address=os.getenv("GRPC_HOST_ADDRESS", "localhost:50051")
-        )
+    - Receives queries via Motia event queue
+    - Uses A2A protocol internally for agent semantics
+    - Emits structured intent results to Motia queue
+    """
+    query = event["query"]
+    user_id = event["user_id"]
+    conversation_context = event.get("context")
+
+    # Extract A2A RequestContext from Motia event
+    a2a_request = context.data.get("a2a_context", {})
+
+    # Parse intent using LLM (A2A compatible)
+    intent_result = await parse_intent_with_llm(
+        query,
+        conversation_context,
+        a2a_request
+    )
+
+    # Emit structured intent via Motia (automatically queued)
+    await context.emit({
+        "topic": "intent.parsed",
+        "data": {
+            "intent": intent_result.intent,
+            "entities": intent_result.entities,
+            "confidence": intent_result.confidence,
+            "query_type": intent_result.query_type,
+            "metadata": {
+                "a2a_agent_id": "intent_parser_a2a",
+                "timestamp": context.timestamp,
+                "user_id": user_id
+            }
+        }
+    })
+
+    return {"status": "success"}
+
+async def parse_intent_with_llm(
+    query: str,
+    context: Optional[Dict],
+    a2a_request: Dict
+) -> "IntentResult":
+    """
+    Internal A2A-compatible intent parsing
+
+    Emits A2A thoughts and actions through Motia's event system:
+    - context.emit("a2a.thought", {...})
+    - context.emit("a2a.action", {...})
+    """
+    # Emit A2A thought event
+    await context.emit({
+        "topic": "a2a.thought",
+        "data": {
+            "agent_id": "intent_parser_a2a",
+            "thought": f"Analyzing query: {query[:100]}...",
+            "timestamp": context.timestamp
+        }
+    })
+
+    # Use LLM for intent classification
+    llm_response = await llm_client.classify_intent(
+        query=query,
+        context=context
+    )
+
+    # Emit A2A action event
+    await context.emit({
+        "topic": "a2a.action",
+        "data": {
+            "agent_id": "intent_parser_a2a",
+            "action": "intent_classification",
+            "result": llm_response.intent,
+            "timestamp": context.timestamp
+        }
+    })
+
+    return IntentResult(
+        intent=llm_response.intent,
+        entities=llm_response.entities,
+        confidence=llm_response.confidence,
+        query_type=llm_response.query_type
+    )
 ```
 
-**Agent Implementation Using Microsoft Agent Framework**:
+**2. Motia Runtime Configuration (No Setup Code Needed):**
 
-**1. Example Agent with Message Handlers:**
+Motia automatically discovers and registers all `@step` functions - no manual registration required. This is one of the key advantages of the Motia framework:
 
 ```python
-from dataclasses import dataclass
-from autogen_core import RoutedAgent, MessageContext, message_handler, AgentId
+# In your main.py or app.py
+from motia import create_app
 
-@dataclass
-class IntentParseRequest:
-    """Message type for intent parsing requests"""
-    query: str
-    user_id: str
-    conversation_context: Optional[Dict[str, Any]] = None
+# Motia automatically:
+# 1. Scans all modules for @step decorators
+# 2. Registers them with the runtime
+# 3. Sets up event subscriptions
+# 4. Configures API endpoints
+# 5. Manages workflow execution
 
-@dataclass
-class IntentParseResponse:
-    """Message type for intent parsing responses"""
-    intent: str
-    entities: Dict[str, Any]
-    confidence: float
-    query_type: str
+app = create_app()
 
-class IntentParserAgent(RoutedAgent):
-    """Intent Parser Agent using Microsoft Agent Framework"""
-    
-    def __init__(self) -> None:
-        super().__init__("Intent Parser Agent")
-        self.llm_client = LLMClient()
-    
-    @message_handler
-    async def handle_intent_parse_request(
-        self, 
-        message: IntentParseRequest, 
-        ctx: MessageContext
-    ) -> IntentParseResponse:
-        """
-        Handle intent parsing requests
-        
-        Microsoft Agent Framework automatically routes messages
-        to this handler based on message type.
-        """
-        # Parse intent using LLM
-        intent_result = await self.parse_intent(
-            message.query,
-            message.conversation_context
-        )
-        
-        # Return response (automatically sent back to caller)
-        return IntentParseResponse(
-            intent=intent_result.intent,
-            entities=intent_result.entities,
-            confidence=intent_result.confidence.overall_confidence,
-            query_type=intent_result.query_type
-        )
-    
-    async def parse_intent(self, query: str, context: Optional[Dict]) -> IntentResult:
-        """Internal method for intent parsing logic"""
-        # Implementation details...
-        pass
+# Start Motia - all agents are already configured
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=3000)
 ```
 
-**2. Runtime Setup and Agent Registration:**
+**3. Agent Communication via Motia Queues:**
 
 ```python
-async def setup_single_threaded_runtime():
-    """Setup SingleThreadedAgentRuntime for single-process deployment"""
-    from autogen_core import SingleThreadedAgentRuntime
-    
-    # Create runtime
-    runtime = SingleThreadedAgentRuntime()
-    
-    # Register agents with runtime
-    # Runtime manages agent lifecycle and message routing
-    await IntentParserAgent.register(
-        runtime, 
-        "intent_parser",
-        lambda: IntentParserAgent()
-    )
-    
-    await KnowledgeRetrieverAgent.register(
-        runtime,
-        "knowledge_retriever", 
-        lambda: KnowledgeRetrieverAgent()
-    )
-    
-    # Start runtime
-    runtime.start()
-    
-    return runtime
+# Motia runtime automatically handles:
+# - Event routing based on 'subscribes' and 'emits' declarations
+# - Queue management (no external broker needed)
+# - Retry logic and fault tolerance
+# - Progress tracking and observability
 
-async def setup_distributed_runtime():
-    """Setup GrpcWorkerAgentRuntime for distributed deployment"""
-    from autogen_ext.runtimes.grpc import (
-        GrpcWorkerAgentRuntime,
-        GrpcWorkerAgentRuntimeHost
-    )
-    
-    # Start host service (runs separately, typically in its own process)
-    host = GrpcWorkerAgentRuntimeHost(address="localhost:50051")
-    host.start()
-    
-    # Create worker runtime
-    worker = GrpcWorkerAgentRuntime(host_address="localhost:50051")
-    await worker.start()
-    
-    # Register agents with worker
-    await IntentParserAgent.register(
-        worker,
-        "intent_parser",
-        lambda: IntentParserAgent()
-    )
-    
-    await KnowledgeRetrieverAgent.register(
-        worker,
-        "knowledge_retriever",
-        lambda: KnowledgeRetrieverAgent()
-    )
-    
-    return worker, host
+# Example: Query received event triggers Intent Parser
+{
+    "topic": "query.received",
+    "data": {
+        "query": "What is RAG?",
+        "user_id": "user_123",
+        "context": {}
+    }
+}
+
+# Intent Parser emits (automatically routes to Knowledge Retriever):
+{
+    "topic": "intent.parsed",
+    "data": {
+        "intent": "information_retrieval",
+        "entities": {"topic": "RAG"},
+        "metadata": {...}
+    }
+}
+
+# Knowledge Retriever subscribes to "intent.parsed"
+# and emits "knowledge.retrieved" automatically
 ```
 
-**3. Sending Messages Between Agents:**
+**4. Agent Communication via Motia Queues:**
 
 ```python
-async def orchestrate_query(runtime: AgentRuntime, query: str, user_id: str):
-    """Orchestrate query processing using Microsoft Agent Framework"""
-    
-    # Send message to Intent Parser Agent
-    # Runtime handles message delivery and routing
-    intent_response = await runtime.send_message(
-        IntentParseRequest(query=query, user_id=user_id),
-        AgentId("intent_parser", "default")
-    )
-    
-    # Send message to Knowledge Retriever Agent
-    retrieval_response = await runtime.send_message(
-        RetrievalRequest(
-            query=query,
-            intent=intent_response.intent,
-            entities=intent_response.entities
-        ),
-        AgentId("knowledge_retriever", "default")
-    )
-    
-    # Continue orchestration...
-    return retrieval_response
+# Motia automatically routes events based on 'subscribes' and 'emits' declarations
+# No manual message sending needed - declare it and Motia handles it!
+
+# Workflow flows naturally:
+# 1. API endpoint emits 'query.received' (defined elsewhere)
+# 2. IntentParser subscribes → automatically receives event
+# 3. IntentParser emits 'intent.parsed' → automatically routed
+# 4. KnowledgeRetriever subscribes to 'intent.parsed' → receives it
+
+# For manual orchestration when needed:
+async def trigger_workflow(query: str, user_id: str):
+    """Manually trigger workflow by emitting initial event"""
+    from motia import publish
+
+    await publish({
+        "topic": "query.received",
+        "data": {
+            "query": query,
+            "user_id": user_id,
+            "context": {},
+            "timestamp": "2025-06-05T10:30:00Z"
+        }
+    })
 ```
 
-**Runtime Factory with Environment Configuration:**
+**Motia Runtime Configuration via Environment:**
 
 ```python
 import os
-from typing import Literal, Optional
-from pydantic import BaseModel
 
-class RuntimeConfig(BaseModel):
-    """Configuration for Microsoft Agent Framework runtime"""
-    mode: Literal["single_threaded", "grpc_distributed"] = "single_threaded"
-    grpc_host_address: str = "localhost:50051"
-    grpc_worker_count: int = 1  # Number of worker processes for distributed mode
+# Motia configuration is simple and declarative
+# No complex runtime factories needed
 
-class RuntimeFactory:
-    """Factory for creating Microsoft Agent Framework runtimes"""
-    
-    @classmethod
-    async def create_runtime(cls, config: RuntimeConfig) -> AgentRuntime:
-        """Create appropriate runtime based on configuration"""
-        if config.mode == "single_threaded":
-            runtime = SingleThreadedAgentRuntime()
-            runtime.start()
-            return runtime
-            
-        elif config.mode == "grpc_distributed":
-            # For distributed mode, return worker runtime
-            # Host should be started separately (typically in its own process)
-            worker = GrpcWorkerAgentRuntime(host_address=config.grpc_host_address)
-            await worker.start()
-            return worker
-        else:
-            raise ValueError(f"Unsupported runtime mode: {config.mode}")
-    
-    @classmethod
-    def from_env(cls) -> RuntimeConfig:
-        """Create runtime config from environment variables"""
-        return RuntimeConfig(
-            mode=os.getenv("AGENT_RUNTIME_MODE", "single_threaded"),
-            grpc_host_address=os.getenv("GRPC_HOST_ADDRESS", "localhost:50051"),
-            grpc_worker_count=int(os.getenv("GRPC_WORKER_COUNT", "1"))
-        )
+MOTIA_CONFIG = {
+    # Motia runtime mode
+    "MOTIA_RUNTIME_MODE": os.getenv("MOTIA_RUNTIME_MODE", "development"),
+
+    # Logging and observability
+    "MOTIA_LOG_LEVEL": os.getenv("MOTIA_LOG_LEVEL", "INFO"),
+
+    # Workbench configuration (Motia's built-in UI)
+    "MOTIA_WORKBENCH_ENABLED": os.getenv("MOTIA_WORKBENCH_ENABLED", "true"),
+
+    # Python or TypeScript runtime (Motia supports both!)
+    "MOTIA_LANGUAGE": os.getenv("MOTIA_LANGUAGE", "python"),
+
+    # Port for HTTP API endpoints
+    "PORT": os.getenv("PORT", "3000"),
+
+    # All agent communication happens via Motia queues
+    # No separate configuration for gRPC, Redis, etc.
+}
+
+# Usage:
+# MOTIA_RUNTIME_MODE=production python main.py
+# No code changes needed between development and production
 ```
 
 **Configuration Examples:**
 
 ```yaml
-# config/runtime.yaml
+# config/motia.yaml
 
-# Single-Threaded (default) - Single process, high performance
-single_threaded:
-  mode: single_threaded
+# Development Mode (default)
+development:
+  log_level: DEBUG
+  workbench_enabled: true
+  # Motia automatically:
+  # - Provides hot reload
+  # - Shows detailed logs
+  # - Enables Workbench UI
 
-# gRPC Distributed - Multi-process deployment
-grpc_distributed:
-  mode: grpc_distributed
-  grpc_host_address: localhost:50051
-  grpc_worker_count: 3
+# Production Mode (same code, different config)
+production:
+  log_level: INFO
+  workbench_enabled: true  # Keep for monitoring!
+  # Same runtime, same agents, just less verbose logging
 
-# Easy switching via environment variable
-# AGENT_RUNTIME_MODE=single_threaded  (default)
-# AGENT_RUNTIME_MODE=grpc_distributed
-# GRPC_HOST_ADDRESS=localhost:50051
-# GRPC_WORKER_COUNT=3
+# Server Configuration (port, host, etc.)
+server:
+  port: 3000
+  host: 0.0.0.0
+  # HTTP API endpoints are automatically generated from @step declarations
+
+# Environment Variables:
+# MOTIA_RUNTIME_MODE=development  # Default, hot reload, debug logs
+# MOTIA_RUNTIME_MODE=production   # Optimized, info logs
+# MOTIA_WORKBENCH_ENABLED=true    # Enable Workbench UI
+# MOTIA_LOG_LEVEL=DEBUG           # Log level
 ```
 
-**Usage in Orchestrator:**
+**A2A-Motia Workflow Implementation:**
 
 ```python
-from autogen_core import RoutedAgent, MessageContext, message_handler, AgentId
+from motia import step
+from typing import Dict, Any
 
-class OrchestratorAgent(RoutedAgent):
-    """Orchestrator using Microsoft Agent Framework"""
-    
-    def __init__(self, runtime: AgentRuntime) -> None:
-        super().__init__("Orchestrator Agent")
-        self.runtime = runtime
-    
-    @message_handler
-    async def handle_query_request(
-        self,
-        message: QueryRequest,
-        ctx: MessageContext
-    ) -> QueryResponse:
-        """Handle incoming query requests"""
-        
-        # Execute Plan-and-Execute workflow
-        context = ExecutionContext(query=message.query, user_id=message.user_id)
-        plan = await self.create_plan(message.query, context)
-        
-        # Execute tasks by sending messages to agents
-        await self.execute_plan(plan, context)
-        
-        # Return aggregated results
-        return QueryResponse(
-            answer=context.generated_answer.text,
-            sources=context.generated_answer.sources,
-            confidence=context.evaluation.overall_score
-        )
-    
-    async def execute_task(self, task: AgentTask, context: ExecutionContext) -> None:
-        """Execute task by sending message to appropriate agent"""
-        
-        if task == AgentTask.PARSE_INTENT:
-            # Send message to Intent Parser Agent via runtime
-            response = await self.runtime.send_message(
-                IntentParseRequest(
-                    query=context.query,
-                    user_id=context.user_id,
-                    conversation_context=context.conversation_context
-                ),
-                AgentId("intent_parser", "default")
-            )
-            context.intent = response
-        
-        elif task == AgentTask.RETRIEVE_KNOWLEDGE:
-            # Send message to Knowledge Retriever Agent
-            response = await self.runtime.send_message(
-                RetrievalRequest(
-                    query=context.query,
-                    intent=context.intent.intent,
-                    entities=context.intent.entities
-                ),
-                AgentId("knowledge_retriever", "default")
-            )
-            context.retrieved_documents = response.documents
-        
-        # Similar for other agents...
+# The orchestrator subscribes to incoming queries
+@step(
+    name="Orchestrator",
+    subscribes=["query.received"],
+    emits=["intent.parse", "knowledge.retrieve", "answer.generate"]
+)
+async def orchestrator_handler(event: Dict[str, Any], context) -> Dict[str, Any]:
+    """
+    A2A-Motia Orchestrator
 
-# Initialize application with Microsoft Agent Framework
-async def main():
-    # Create runtime from environment config
-    config = RuntimeFactory.from_env()
-    runtime = await RuntimeFactory.create_runtime(config)
-    
-    # Register all agents with runtime
-    # Runtime manages agent lifecycle and message routing
-    await IntentParserAgent.register(runtime, "intent_parser", lambda: IntentParserAgent())
-    await KnowledgeRetrieverAgent.register(runtime, "knowledge_retriever", lambda: KnowledgeRetrieverAgent())
-    await AnswerGeneratorAgent.register(runtime, "answer_generator", lambda: AnswerGeneratorAgent())
-    await EvaluatorAgent.register(runtime, "evaluator", lambda: EvaluatorAgent())
-    await OrchestratorAgent.register(runtime, "orchestrator", lambda: OrchestratorAgent(runtime))
-    
-    # Send query to orchestrator
-    response = await runtime.send_message(
-        QueryRequest(query="What is RAG?", user_id="test"),
-        AgentId("orchestrator", "default")
+    - Receives queries via Motia events
+    - Emits tasks to A2A-compatible agents
+    - Aggregates results from A2A agents
+    - Returns final answer
+    """
+    query = event["query"]
+    user_id = event["user_id"]
+    conversation_context = event.get("context", {})
+
+    # Emit A2A workflow start event
+    await context.emit({
+        "topic": "a2a.workflow.start",
+        "data": {
+            "workflow_id": context.trace_id,
+            "query": query,
+            "timestamp": context.timestamp
+        }
+    })
+
+    # Step 1: Parse intent (emits to Intent Parser agent)
+    await context.emit({
+        "topic": "intent.parse",
+        "data": {
+            "query": query,
+            "user_id": user_id,
+            "context": conversation_context,
+            "metadata": {"a2a_agent_id": "intent_parser_a2a"}
+        }
+    })
+
+    # Intent parser will emit 'intent.parsed' which triggers knowledge retrieval
+    # This happens automatically via Motia's event system
+
+    return {"status": "workflow_started", "workflow_id": context.trace_id}
+
+# Alternative: Using A2A agents directly within Motia
+@step(
+    name="OrchestratorDirect",
+    subscribes=["query.received"],
+    emits=["answer.generated"]
+)
+async def orchestrator_direct_handler(event: Dict[str, Any], context) -> Dict[str, Any]:
+    """
+    Direct A2A agent orchestration within Motia
+    """
+    from a2a_protocol import AgentCard, Task, TaskStatus
+
+    # Discover available A2A agents from Motia state
+    available_agents = context.state.get("a2a.agents", [])
+
+    # Create A2A task
+    task = Task(
+        id=context.trace_id,
+        input={"query": event["query"]},
+        status=TaskStatus.SUBMITTED
     )
-    
-    print(f"Answer: {response.answer}")
-    
-    # Cleanup
-    await runtime.stop()
+
+    # Send to A2A agent via Motia event
+    await context.emit({
+        "topic": f"a2a.task.{available_agents[0]['id']}",
+        "data": {
+            "task": task.to_dict(),
+            "callback_topic": "answer.generated"
+        }
+    })
+
+    return {"status": "task_submitted_to_a2a_agent"}
 ```
 
-**Benefits of Microsoft Agent Framework:**
+**Benefits of Motia Framework:**
 
-1. **Flexible Deployment**: Start with SingleThreadedAgentRuntime, scale to GrpcWorkerAgentRuntime without code changes
-2. **Performance**: SingleThreadedAgentRuntime has zero serialization/network overhead
-3. **Scalability**: GrpcWorkerAgentRuntime enables horizontal scaling across multiple processes/containers
-4. **Testability**: Built-in testing support with runtime mocking
-5. **Configuration-Driven**: Switch runtimes via environment variables
-6. **Type-Safe Messaging**: Pydantic models ensure message validation
-7. **Message Routing**: Automatic routing to handlers based on message type
-8. **Lifecycle Management**: Runtime manages agent creation, destruction, and state
-9. **Cross-Language Support**: gRPC enables polyglot agent systems (Python, .NET, etc.)
-10. **Production-Ready**: Built by Microsoft, used in AutoGen ecosystem
+1. **Unified Backend**: Single Step primitive for APIs, background jobs, workflows, and AI agents
+2. **Zero Configuration**: Auto-discovery of steps and automatic connection via emits/subscribes
+3. **Multi-Language Support**: Write steps in TypeScript, Python, JavaScript, and more in same system
+4. **Event-Driven**: Built-in event bus for loosely coupled agent communication
+5. **Built-in Observability**: End-to-end tracing, state management, and monitoring
+6. **Flexible Deployment**: Single-process or distributed with same code
+7. **Developer-Friendly**: Simple file-based configuration, no complex setup
+8. **Production-Ready**: Used in ChessArena.ai and other production systems
+9. **Scalability**: Built-in state management and horizontal scaling support
+10. **Agentic AI**: Native support for AI agent workflows with streaming
 
-**When to Use Each Runtime:**
+**When to Use Different Runtime Modes:**
 
-| Runtime | Use Case | Performance | Complexity | Scalability |
-|---------|----------|-------------|------------|-------------|
-| **SingleThreadedAgentRuntime** | Single-process deployment, development, testing | Highest (no network) | Lowest | Vertical only |
-| **GrpcWorkerAgentRuntime** | Distributed deployment, microservices, horizontal scaling | Lower (gRPC overhead) | Higher | Horizontal |
+| Runtime Mode | Use Case | Workers | Logging | Tracing |
+|--------------|----------|---------|---------|---------|
+| **Development** | Local development, debugging | 1 | DEBUG | Full |
+| **Default** | Staging, small production | 1-2 | INFO | Full |
+| **Production** | Large-scale production | 4+ | INFO/WARN | Full |
 
-**Migration Path:**
+**Motia vs Traditional Approaches:**
 
-1. **Start**: SingleThreadedAgentRuntime for MVP and development
-2. **Scale**: Switch to GrpcWorkerAgentRuntime when scaling horizontally
-3. **Hybrid**: Use multiple workers with different agent types for load distribution
+| Feature | Traditional (Multiple Frameworks) | Motia (Unified) |
+|---------|-----------------------------------|-----------------|
+| Workflow | Separate queue + API + Agent systems | Single Step primitive |
+| State Management | External Redis/DB | Built-in |
+| Language Support | Different runtimes | Unified runtime |
+| Observability | Manual integration | Built-in |
+| Learning Curve | Multiple frameworks | Single primitive |
+
+**Scalability Path:**
+
+1. **Start**: Single worker, development mode for MVP
+2. **Scale**: Increase workers, enable production mode
+3. **Distribute**: Use Redis adapters for state/streams across instances
+4. **Monitor**: Leverage built-in observability and tracing
 
 ### 4. Knowledge Retriever Agent
 
@@ -5308,13 +5208,12 @@ function RAGWithDesignThinking() {
 
 ## Technology Stack
 
-### Current Implementation (Aligned with Existing Codebase)
+### Current Implementation (Unified with Motia)
 
 **Backend:**
-- **Microsoft Agent Framework** (`agent-framework`) - Core agent orchestration
-- **AG-UI Protocol** (`agent-framework-ag-ui`) - Frontend-backend communication
-- **FastAPI** - HTTP server and API endpoints
-- **Python 3.12+** - Runtime environment
+- **Motia Framework** - Unified backend for APIs, workflows, and AI agents
+- **FastAPI** - HTTP server and API endpoints (or use Motia's native API steps)
+- **Python 3.12+** - Runtime environment (with TypeScript/JavaScript multi-lang support)
 - **Azure OpenAI** or **OpenAI** - LLM providers (configurable via environment)
 - **Pydantic** - Data validation and serialization
 - **python-dotenv** - Environment configuration
@@ -5323,14 +5222,15 @@ function RAGWithDesignThinking() {
 **Frontend:**
 - **Next.js 16** (App Router) with **React 19** and **TypeScript**
 - **CopilotKit** (`@copilotkit/react-core`, `@copilotkit/react-ui`, `@copilotkit/runtime`) - Agent UI framework
-- **AG-UI Client** (`@ag-ui/client`) - HTTP agent communication
 - **Tailwind CSS 4** - Styling
 - **Zod** - Schema validation
 
 **Development Tools:**
-- **Concurrently** - Run frontend and backend simultaneously
-- **ESLint** - Code linting
+- **pnpm** - Monorepo management (Motia uses pnpm workspaces)
+- **Biome** - Modern linting/formatting (replaces ESLint/Prettier)
 - **TypeScript 5** - Type safety
+- **Husky** - Git hooks
+- **Concurrently** - Run frontend and backend simultaneously
 
 ### Planned Additions for RAG System
 
@@ -5344,6 +5244,7 @@ function RAGWithDesignThinking() {
 - **asyncpg** - Async PostgreSQL driver
 - **Parlant** - Behavioral guidelines and routing with ensured compliance
 - **Agent Lightning** - Prompt optimization with RL-based tuning (optional)
+- **Motia Adapters** - Redis for state/streams, RabbitMQ for events (if distributing)
 
 **Optional Components:**
 - **Cohere Rerank** - Document reranking (if quality improvement needed)
@@ -5351,7 +5252,7 @@ function RAGWithDesignThinking() {
 
 **Vector Database Options:**
 - **Primary:** PostgreSQL with pgvector extension (simplest integration)
-- **Alternatives:** Azure AI Search, Weaviate, Pinecone, Qdrant, FAISS
+- **Alternatives:**  Weaviate, FAISS, Azure AI Search
 
 **Infrastructure:**
 - **Docker & Docker Compose** - Containerization
@@ -5360,6 +5261,7 @@ function RAGWithDesignThinking() {
 
 **Observability:**
 - **Langfuse** - Distributed tracing, metrics, cost tracking
+- **Motia Workbench** - Visual debugger and tracing UI (built-in)
 - **OpenTelemetry** (optional) - Unified observability
 - **Custom dashboards** - Real-time agent monitoring
 
@@ -5368,159 +5270,313 @@ function RAGWithDesignThinking() {
 - **Spider, UNITE, BIRD** - SQL generation benchmarks
 - **TruthfulQA, MT-Bench** - Generation quality benchmarks
 
-### Architecture Alignment with Current Codebase
+### Architecture Alignment with Motia Framework
 
-The design leverages the existing Microsoft Agent Framework architecture:
+The design leverages Motia's unified Step-based architecture:
 
-**1. Agent Definition Pattern:**
+**1. Step Definition Pattern:**
 ```python
-from agent_framework import ChatAgent, ChatClientProtocol, ai_function
-from agent_framework_ag_ui import AgentFrameworkAgent
+from typing import Dict, Any
+from motia import StepFactory
 
-# Create specialized agent
-base_agent = ChatAgent(
-    name="intent_parser_agent",
-    instructions="You extract intent and entities from user queries...",
-    chat_client=chat_client,
-    tools=[parse_intent, extract_entities]
+# Define as API step that emits events for workflow orchestration
+@StepFactory.api_step(
+    name="intent_parser",
+    path="/parse-intent",
+    method="POST",
+    emits=["intent.parsed"]
 )
+async def intent_parser_step(request: Dict[str, Any], context: Dict[str, Any]):
+    """
+    Intent Parser - Receives query via API, parses intent, emits event for next step
+    """
+    query = request.get("query")
+    user_id = request.get("user_id")
 
-# Wrap for CopilotKit compatibility
-copilotkit_agent = AgentFrameworkAgent(
-    agent=base_agent,
-    name="IntentParserAgent",
-    description="Parses user intent with multi-step planning",
-    state_schema=INTENT_STATE_SCHEMA,
-    predict_state_config=INTENT_PREDICT_CONFIG
-)
+    # Parse intent using LLM
+    intent_result = await parse_intent_with_llm(query)
+
+    # Emit event for knowledge retriever step
+    await context["emit"]({
+        "topic": "intent.parsed",
+        "data": {
+            "query": query,
+            "user_id": user_id,
+            "intent": intent_result.intent,
+            "entities": intent_result.entities,
+            "confidence": intent_result.confidence.overall_confidence
+        }
+    })
+
+    return {"status": 200, "body": intent_result}
+
+# Event-driven step that automatically executes when intent.parsed is emitted
+@StepFactory.event_step(name="knowledge_retriever", subscribes="intent.parsed")
+async def knowledge_retriever_step(event_data: Dict[str, Any], context: Dict[str, Any]):
+    """
+    Knowledge Retriever - Automatically triggered by intent.parsed event
+    """
+    query = event_data["query"]
+    intent = event_data["intent"]
+
+    # Retrieve documents from vector store
+    documents = await retrieve_documents(query, intent)
+
+    # Emit event for answer generation
+    await context["emit"]({
+        "topic": "documents.retrieved",
+        "data": {
+            "query": query,
+            "documents": documents,
+            "intent": intent
+        }
+    })
+
+    context["logger"].info(f"Retrieved {len(documents)} documents")
 ```
 
-**2. Tool Functions with `@ai_function`:**
+**2. Tool Functions:**
 ```python
-@ai_function(
-    name="parse_intent",
-    description="Extract intent and entities from user query with confidence scoring"
-)
-def parse_intent(
+# Standard Python functions used as tools within steps
+from typing import Annotated
+from pydantic import Field
+
+async def parse_intent_with_llm(
     query: Annotated[str, Field(description="User's natural language query")],
     context: Annotated[dict, Field(description="Conversation context")]
 ) -> IntentResult:
-    """Parse intent using multi-step reasoning"""
-    # Implementation
-    return IntentResult(...)
+    """Parse intent using multi-step reasoning with LLM"""
+    # Implementation using Azure OpenAI or OpenAI
+    llm_client = get_llm_client()
+
+    prompt = f"""
+    Extract intent and entities from this query: {query}
+
+    Return structured output with:
+    - intent: main user intention
+    - entities: extracted parameters
+    - confidence: confidence scores
+    - query_type: classification
+    """
+
+    response = await llm_client.complete(prompt)
+    return IntentResult.parse_from_llm(response)
+
+async def retrieve_documents(
+    query: str,
+    intent: str,
+    vector_store: VectorStoreAdapter,
+    top_k: int = 10
+) -> List[Document]:
+    """Retrieve relevant documents from vector store"""
+    embedding = await generate_embedding(query)
+    return await vector_store.search(embedding, top_k=top_k)
 ```
 
-**3. State Management for UI Sync:**
+**3. State Management Across Steps:**
 ```python
-STATE_SCHEMA = {
-    "intent": {
-        "type": "object",
-        "properties": {
-            "intent": {"type": "string"},
-            "entities": {"type": "object"},
-            "confidence": {"type": "number"}
-        }
-    },
-    "documents": {
-        "type": "array",
-        "items": {"type": "object"}
-    }
-}
+# State is automatically managed by Motia across step executions
+# Steps can access and modify shared state via context["state"]
 
-PREDICT_STATE_CONFIG = {
-    "intent": {
-        "tool": "parse_intent",
-        "tool_argument": "result"
-    }
-}
+@StepFactory.event_step(name="answer_generator", subscribes="documents.retrieved")
+async def answer_generator_step(event_data: Dict[str, Any], context: Dict[str, Any]):
+    """Generate answer with access to shared state"""
+    # Access shared state from previous steps
+    state = context["state"]
+
+    query = event_data["query"]
+    documents = event_data["documents"]
+
+    # Store intermediate results in state
+    state["query"] = query
+    state["documents"] = documents
+    state["generation_start_time"] = datetime.now()
+
+    # Generate answer using LLM
+    answer = await generate_answer(query, documents)
+
+    # Update state with result
+    state["answer"] = answer
+    state["generation_end_time"] = datetime.now()
+
+    # Emit event for evaluator
+    await context["emit"]({
+        "topic": "answer.generated",
+        "data": {"query": query, "answer": answer, "documents": documents}
+    })
+
+    return answer
 ```
 
-**4. FastAPI Integration:**
+**4. Step Configuration and Registration:**
 ```python
-from agent_framework_ag_ui import add_agent_framework_fastapi_endpoint
+# steps/intent_parser.py
+from motia import StepFactory
+from typing import Dict, Any
 
-app = FastAPI(title="MCP Multi-Agent RAG System")
+@StepFactory.api_step(
+    name="intent_parser",
+    path="/api/intent",
+    method="POST",
+    emits=["intent.parsed"]
+)
+async def intent_parser_step(request: Dict[str, Any], context: Dict[str, Any]):
+    """Extract intent from user query"""
+    # Implementation here
+    pass
+
+# steps/knowledge_retriever.py
+@StepFactory.event_step(
+    name="knowledge_retriever",
+    subscribes="intent.parsed"
+)
+async def knowledge_retriever_step(event_data: Dict[str, Any], context: Dict[str, Any]):
+    """Retrieve relevant documents"""
+    # Implementation here
+    pass
+
+# In main.py or setup.py
+def register_all_steps():
+    """Auto-discover and register all step modules"""
+    import steps.intent_parser
+    import steps.knowledge_retriever
+    import steps.answer_generator
+    import steps.evaluator_step
+    import steps.human_review_step
+    # Steps are registered automatically via decorators
+
+async def initialize_motia():
+    """Initialize Motia runtime"""
+    register_all_steps()
+    runtime = await StepFactory.create_runtime()
+    return runtime
+```
+
+**5. FastAPI Integration (Optional):**
+```python
+# If using FastAPI alongside Motia
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+app = FastAPI(title="MCP Multi-Agent RAG System with Motia")
 app.add_middleware(CORSMiddleware, allow_origins=["*"])
 
-# Add agent endpoint
-add_agent_framework_fastapi_endpoint(
-    app=app,
-    agent=my_agent,
-    path="/"
-)
+# Motia steps can also be FastAPI endpoints via the api step type
+# Or integrate with existing FastAPI routes
+
+@app.post("/query")
+async def process_query(query_request: QueryRequest):
+    """Legacy API endpoint - can still use Motia steps"""
+    runtime = await get_motia_runtime()
+    result = await runtime.execute_step(
+        "intent_parser",
+        query_request.dict()
+    )
+    return result
 ```
 
-**5. Chat Client Configuration:**
+**6. LLM Client Configuration:**
 ```python
-from agent_framework.azure import AzureOpenAIChatClient
-from azure.identity import DefaultAzureCredential
+import os
+from typing import Union
 
-# Azure OpenAI (current setup)
-chat_client = AzureOpenAIChatClient(
-    credential=DefaultAzureCredential(),
-    deployment_name=os.getenv("AZURE_OPENAI_CHAT_DEPLOYMENT_NAME", "gpt-4o-mini"),
-    endpoint=os.getenv("AZURE_OPENAI_ENDPOINT")
-)
+# Abstract LLM client - works with both Azure OpenAI and OpenAI
+class LLMClient:
+    def __init__(self, provider: str = "azure"):
+        self.provider = provider
+        if provider == "azure":
+            self.client = self._setup_azure_client()
+        elif provider == "openai":
+            self.client = self._setup_openai_client()
+        else:
+            raise ValueError(f"Unsupported provider: {provider}")
 
-# Or OpenAI
-from agent_framework.openai import OpenAIChatClient
+    def _setup_azure_client(self):
+        from openai import AsyncAzureOpenAI
+        return AsyncAzureOpenAI(
+            api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+            api_version="2024-02-01",
+            azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT")
+        )
 
-chat_client = OpenAIChatClient(
-    model_id=os.getenv("OPENAI_CHAT_MODEL_ID", "gpt-4o-mini"),
-    api_key=os.getenv("OPENAI_API_KEY")
+    def _setup_openai_client(self):
+        from openai import AsyncOpenAI
+        return AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+    async def complete(self, prompt: str, **kwargs):
+        """Unified completion interface"""
+        response = await self.client.chat.completions.create(
+            model=kwargs.get("model", "gpt-4o-mini"),
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=kwargs.get("max_tokens", 1000),
+            temperature=kwargs.get("temperature", 0.3)
+        )
+        return response.choices[0].message.content
 )
 ```
 
-### Migration Path from Current Implementation
+### Migration Path to Motia Implementation
 
-**Phase 1: Core RAG Infrastructure (Weeks 1-2)**
-- Add `llama-index`, `pgvector`, `asyncpg` to `pyproject.toml`
-- Set up PostgreSQL with pgvector extension
-- Create document ingestion pipeline using LlamaIndex
-- Create Knowledge Retriever agent using `ChatAgent` pattern
-- Add retrieval tools with `@ai_function` decorator
+**Phase 1: Bootstrap Motia Framework (Weeks 1-2)**
+- Add Motia as dependency: `motia` to `pyproject.toml`
+- Create step directory structure: `steps/intent_parser.py`, `steps/knowledge_retriever.py`, etc.
+- Convert existing agents to Motia Step pattern with `@StepFactory` decorators
+- Set up PostgreSQL with pgvector extension for vector storage
+- Initialize LlamaIndex for document processing
 
-**Phase 2: Multi-Agent Coordination (Weeks 3-4)**
-- Create Intent Parser agent with advanced techniques
-- Create Answer Generator agent
-- Create Evaluator agent with RAGAS metrics
-- Coordinate agents via Microsoft Agent Framework
-- Update state schemas for multi-agent coordination
+**Phase 2: Core RAG Pipeline Steps (Weeks 3-4)**
+- Implement Intent Parser as API step emitting `intent.parsed` events
+- Implement Knowledge Retriever as event step subscribing to `intent.parsed`
+- Implement Answer Generator for synthesis with Chain-of-Thought prompting
+- Implement Evaluator step with RAGAS metrics for quality assessment
+- Test end-to-end pipeline with event-driven workflow
 
 **Phase 3: Parlant + CopilotKit HIL Integration (Weeks 5-6)**
-- Integrate Parlant SDK for behavioral guidelines
-- Define guidelines for all four phases (Discover, Define, Develop, Deliver)
-- Implement CopilotKit HIL intervention points
-- Add Six Thinking Hats prompting patterns
-- Create glossary terms and canned responses
+- Integrate Parlant SDK for behavioral guidelines across all steps
+- Define Phase-specific guidelines: Discover, Define, Develop, Deliver
+- Implement CopilotKit intervention points for human oversight
+- Add Six Thinking Hats patterns to step implementations
+- Create glossary terms and canned responses for consistency
 
 **Phase 4: Quality & Observability (Weeks 7-8)**
-- Integrate Langfuse SDK for tracing
-- Add RAGAS evaluation metrics
-- Implement Human Review workflow with approval mode
-- Add property-based tests with Hypothesis
-- Create evaluation dashboards
+- Integrate Langfuse SDK for comprehensive tracing across steps
+- Add RAGAS evaluation with custom metrics for RAG-specific quality
+- Implement Human Review workflow with approval/rejection flows
+- Add property-based tests with Hypothesis for all steps
+- Set up Motia Workbench for visual debugging and monitoring
 
-**Phase 5: Advanced Features (Weeks 9-10)**
-- Add ClickHouse for analytics (optional)
-- Implement SQL generation with schema awareness
-- Add data story generation
-- Integrate Agent Lightning for prompt optimization (optional)
-- Performance optimization and caching
+**Phase 5: Advanced Features & Optimization (Weeks 9-10)**
+- Add optional ClickHouse for analytics and SQL generation
+- Implement data story generation with audio narration
+- Integrate Agent Lightning for prompt optimization
+- Add Redis adapters for distributed deployment (if needed)
+- Performance optimization: caching, batching, parallel execution
 
-### Key Design Decisions
+### Key Design Decisions with Motia
 
-**1. Use Microsoft Agent Framework Native Patterns**
-- Leverage `ChatAgent` for all specialized agents
-- Use `@ai_function` for tool definitions
-- Use `AgentFrameworkAgent` wrapper for CopilotKit integration
-- Maintain compatibility with existing `agent.py` structure
+**1. Embrace Motia's Step Primitive**
+- Convert all agents to Motia steps (API, event, or cron types)
+- Use `@StepFactory` decorators for automatic registration
+- Leverage event-driven workflow via emits/subscribes
+- Maintain CopilotKit integration for human-in-the-loop
 
-**2. Extend, Don't Replace**
-- Keep existing proverbs agent as example
-- Add new agents alongside existing ones
-- Reuse FastAPI app and CORS configuration
-- Maintain environment variable patterns
+**2. Unified but Extensible**
+- Keep Motia as single source of truth for orchestration
+- Add LlamaIndex, Parlant, Langfuse as integrated services
+- Reuse existing LLM client configuration
+- Maintain environment variable patterns from current setup
+
+**3. Gradual Migration Strategy**
+- Start with Intent Parser and Knowledge Retriever steps
+- Gradually migrate remaining agents to step pattern
+- Keep FastAPI for legacy compatibility if needed
+- Use Motia's built-in observability to monitor migration
+
+**4. Best of Both Worlds**
+- Motia for unified orchestration and agent communication
+- CopilotKit for frontend integration and human oversight
+- Parlant for behavioral guidelines and quality gates
+- Langfuse for comprehensive tracing and evaluation
 
 **3. Incremental Complexity**
 - Start with simple retrieval (Phase 1)

@@ -29,6 +29,7 @@ export default function CopilotKitPage() {
       <CopilotSidebar
         disableSystemMessage={true}
         clickOutsideToClose={false}
+        apiUrl="http://localhost:8880"
         labels={{
           title: "Popup Assistant",
           initial: "👋 Hi, there! You're chatting with an agent."
@@ -69,7 +70,7 @@ export default function CopilotKitPage() {
 function YourMainContent({ themeColor }: { themeColor: string }) {
   // 🪁 Shared State: https://docs.copilotkit.ai/microsoft-agent-framework/shared-state
   const { state, setState } = useCoAgent<AgentState>({
-    name: "my_agent",
+    name: "CopilotKitMicrosoftAgentFrameworkAgent",
     initialState: {
       proverbs: [
         "CopilotKit may be new, but its the best thing since sliced bread.",
