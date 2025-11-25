@@ -13,7 +13,8 @@ This document specifies the requirements for an MCP-Based Multi-Agent RAG (Retri
 - **LOB (Line of Business)**: A business domain or data source (e.g., Inventory, Orders, Support)
 - **Parlant**: A routing and prompt management framework with guideline-based decision making
 - **Agent Lightning**: A prompt optimization framework using reinforcement learning and automatic tuning
-- **LlamaIndex**: A document indexing and retrieval framework
+- **Micorosoft Agent Framework**: A document multi-agent orchestration framework
+- **Zilliz/Milvus**: A document embedding, indexing, and storage tool
 - **Langfuse**: An observability and tracing platform for LLM applications
 - **RAGAS**: A framework for evaluating RAG system quality (faithfulness, relevance, correctness)
 - **HIL (Human-in-the-Loop)**: A workflow pattern where humans validate or correct agent decisions
@@ -47,13 +48,31 @@ This document specifies the requirements for an MCP-Based Multi-Agent RAG (Retri
 4. WHEN the query requires data analysis THEN the System SHALL detect SQL-generation intent and route to SQLCoder
 5. WHEN the query matches data story patterns THEN the System SHALL emit a data story suggestion event
 
+### Requirement 2.1: High-Quality Intent Statement Definition
+
+High-quality intent statements should be:
+
+- **Clear & Unambiguous:** No room for multiple interpretations.
+  *Example: "Book a flight to Tokyo on Dec 12" vs. "Book a trip."*
+- **Complete:** Contains all necessary parameters for execution (who, what, when, where, constraints).
+  *Example: "Transfer $500 from checking to savings today" (includes amount, source, destination, time).*
+- **Consistent:** No internal contradictions.
+  *Example: "Book a flight to Paris departing from Paris" would be flagged.*
+- **Atomic:** Represents a single actionable unit.
+  *Example: "Check weather in New York" (not "Check weather and book a hotel").*
+- **Verifiable:** Can be confirmed against user expectations or system capabilities.
+  *Example: "Find Italian restaurants within 5 miles" → system can verify radius constraint.*
+- **Traceable:** Linked back to the original user query and clarifications.
+  *Important for debugging and audit trails.*
+- **Prioritized / Ranked:** If multiple intents are possible, the parser should indicate confidence or preference.
+
 ### Requirement 3: Multi-Strategy Knowledge Retrieval
 
 **User Story:** As a system operator, I want multiple retrieval strategies working in parallel, so that the system maximizes recall and retrieves the most relevant information.
 
 #### Acceptance Criteria
 
-1. WHEN the System performs retrieval THEN the Knowledge Retriever Agent SHALL execute embedding-based semantic search
+1. WHEN the System performs retrieval THEN the Knowledge Retrieval Tools SHALL execute embedding-based semantic search
 2. WHEN structured constraints are available THEN the System SHALL apply metadata filtering using ClickHouse schema
 3. WHEN exact pattern matching is needed THEN the System SHALL use guided grep for heuristic refinement
 4. WHEN multiple retrieval strategies complete THEN the System SHALL merge and deduplicate candidate chunks
