@@ -12,10 +12,9 @@ This document specifies the requirements for an MCP-Based Multi-Agent RAG (Retri
 - **RAG (Retrieval-Augmented Generation)**: A technique combining document retrieval with LLM generation
 - **LOB (Line of Business)**: A business domain or data source (e.g., Inventory, Orders, Support)
 - **Parlant**: A routing and prompt management framework with guideline-based decision making
-- **Agent Lightning**: A prompt optimization framework using reinforcement learning and automatic tuning
+- **Langfuse**: An observability and tracing platform for LLM applications
 - **Micorosoft Agent Framework**: A document multi-agent orchestration framework
 - **Zilliz/Milvus**: A document embedding, indexing, and storage tool
-- **Langfuse**: An observability and tracing platform for LLM applications
 - **RAGAS**: A framework for evaluating RAG system quality (faithfulness, relevance, correctness)
 - **HIL (Human-in-the-Loop)**: A workflow pattern where humans validate or correct agent decisions
 - **AG-UI Protocol**: A communication protocol between frontend and backend for agent interactions
@@ -87,7 +86,7 @@ High-quality intent statements should be:
 1. WHEN Parlant evaluates a query THEN the System SHALL apply guidelines in priority order with clear decision boundaries
 2. WHEN a guideline matches THEN the System SHALL log the matched guideline name and routing decision
 3. WHEN no guideline matches THEN the System SHALL route to a fallback retriever
-4. WHEN routing decisions are made THEN the System SHALL trace all decisions to Langfuse for observability
+4. WHEN routing decisions are made THEN the System SHALL trace all decisions to Langfuse for observability and analysis
 5. WHEN guidelines are updated THEN the System SHALL version control changes and support A/B testing
 
 ### Requirement 5: Answer Generation with Prompt Optimization
@@ -96,10 +95,10 @@ High-quality intent statements should be:
 
 #### Acceptance Criteria
 
-1. WHEN the System generates an answer THEN the Answer Generator Agent SHALL use optimized prompts from Agent Lightning
+1. WHEN the System generates an answer THEN the Answer Generator Agent SHALL use optimized prompts identified through Langfuse analysis
 2. WHEN context is assembled THEN the System SHALL include provenance metadata (source, timestamp, confidence)
 3. WHEN generating answers THEN the System SHALL use appropriate LLM models (GPT-4, GPT-4o-mini, o1-preview) based on task complexity
-4. WHEN Agent Lightning receives feedback THEN the System SHALL update prompt templates using reinforcement learning
+4. WHEN Langfuse analysis identifies optimization opportunities THEN the System SHALL update prompt templates using insights from trace data
 5. WHEN prompts are optimized THEN the System SHALL deploy updated templates to Parlant for production use
 
 ### Requirement 6: Quality Evaluation with Seven RAG Characteristics
@@ -112,7 +111,7 @@ High-quality intent statements should be:
 2. WHEN evaluating quality THEN the System SHALL assess relevance, correctness, coverage, consistency, freshness, and traceability
 3. WHEN quality scores are below threshold THEN the System SHALL route the answer to Human Review
 4. WHEN quality scores exceed threshold THEN the System SHALL return the answer to the user with confidence indicators
-5. WHEN evaluation completes THEN the System SHALL log all quality metrics to Langfuse for monitoring
+5. WHEN evaluation completes THEN the System SHALL log all quality metrics to Langfuse for monitoring and analysis
 
 ### Requirement 7: Human-in-the-Loop Review Workflow
 
@@ -123,8 +122,8 @@ High-quality intent statements should be:
 1. WHEN an answer requires review THEN the Human Review Interface SHALL present the answer with context and quality scores via CopilotKit UI
 2. WHEN users interact with the review interface THEN the System SHALL collect feedback using voting (upvote/downvote) and approval/rejection options
 3. WHEN users submit corrections THEN the System SHALL capture corrected answers, routing, prompts, and feedback
-4. WHEN human feedback is collected THEN the System SHALL store complete traces with UUID, timestamps, metrics, and user actions in LightningStore for Agent Lightning analysis
-5. WHEN Agent Lightning processes feedback THEN the System SHALL identify patterns and update routing policies
+4. WHEN human feedback is collected THEN the System SHALL store complete traces with UUID, timestamps, metrics, and user actions in Langfuse for analysis
+5. WHEN Langfuse processes feedback THEN the System SHALL identify patterns and update routing policies
 
 ### Requirement 8: Frontend Integration with AG-UI Protocol
 
@@ -216,8 +215,8 @@ High-quality intent statements should be:
 
 #### Acceptance Criteria
 
-1. WHEN human feedback is collected THEN the System SHALL store traces with corrections in LightningStore
-2. WHEN Agent Lightning analyzes patterns THEN the System SHALL identify routing errors and prompt weaknesses
+1. WHEN human feedback is collected THEN the System SHALL store traces with corrections in Langfuse
+2. WHEN Langfuse analyzes patterns THEN the System SHALL identify routing errors and prompt weaknesses
 3. WHEN optimizations are generated THEN the System SHALL update Parlant guidelines and prompt templates
 4. WHEN A/B testing is enabled THEN the System SHALL compare old and new policies with statistical significance
 5. WHEN improvements are validated THEN the System SHALL promote optimized policies to production automatically
@@ -262,19 +261,19 @@ High-quality intent statements should be:
 1. WHEN low-quality answers require review THEN the System SHALL present content via CopilotKit UI components
 2. WHEN users interact with the review interface THEN the System SHALL collect feedback using voting (upvote/downvote) and approval/rejection options
 3. WHEN users submit corrections THEN the System SHALL accept and store corrected answers alongside original content
-4. WHEN feedback is collected THEN the System SHALL store complete trace data in LightningStore for Agent Lightning analysis
+4. WHEN feedback is collected THEN the System SHALL store complete trace data in Langfuse for analysis
 5. WHEN the interface loads THEN the System SHALL present query context, original answer, and quality metrics to reviewers
 
-### Requirement TR-3: Agent Lightning Integration
+### Requirement TR-3: Langfuse Integration
 
-**Description:** The system SHALL provide structured feedback data schemas to enable Agent Lightning to analyze and improve system performance.
+**Description:** The system SHALL provide comprehensive tracing to enable Langfuse to analyze and improve system performance.
 
 #### Acceptance Criteria
 
-1. WHEN human feedback is collected THEN the System SHALL format data according to HumanFeedback schema with UUID, timestamps, and metrics
-2. WHEN feedback patterns are identified THEN the System SHALL aggregate data using FeedbackAggregation schema for trend analysis
-3. WHEN Agent Lightning requests data THEN the System SHALL provide FeedbackMessage format with priority levels and component associations
-4. WHEN quality issues are detected THEN the System SHALL tag affected components (Evaluator, Generator, Orchestrator) for targeted improvements
+1. WHEN human feedback is collected THEN the System SHALL create complete traces in Langfuse with context and metrics
+2. WHEN feedback patterns are identified THEN the System SHALL aggregate data in Langfuse for trend analysis
+3. WHEN Langfuse requests data THEN the System SHALL provide complete trace information with priority levels and component associations
+4. WHEN quality issues are detected THEN the System SHALL tag affected components (Evaluator, Generator, Orchestrator) in traces for targeted improvements
 5. WHEN improvement recommendations are generated THEN the System SHALL support automated prompt optimization and routing policy updates
 
 ### Requirement TR-4: Frontend Technology Stack
@@ -315,7 +314,7 @@ High-quality intent statements should be:
 
 ### Requirement TR-7: Observability and Monitoring
 
-**Description:** The system SHALL provide comprehensive observability with Langfuse for tracing and Agent Lightning for continuous improvement.
+**Description:** The system SHALL provide comprehensive observability with Langfuse for tracing and analysis.
 
 #### Acceptance Criteria
 
@@ -323,7 +322,7 @@ High-quality intent statements should be:
 2. WHEN feedback is collected THEN the System SHALL log all human review activities for audit and analysis
 3. WHEN system performance is monitored THEN the System SHALL track latency, throughput, and quality metrics
 4. WHEN error conditions occur THEN the System SHALL log appropriate error details for debugging
-5. WHEN optimization opportunities are detected THEN the System SHALL provide actionable insights through Agent Lightning
+5. WHEN optimization opportunities are detected THEN the System SHALL provide actionable insights through Langfuse analysis
 
 ### Requirement TR-8: UI Component Specifications
 
@@ -336,3 +335,39 @@ High-quality intent statements should be:
 3. WHEN UI components are interactive THEN the System SHALL immediately send feedback data to backend services
 4. WHEN user reviews are processed THEN the System SHALL maintain proper state management and loading indicators
 5. WHEN accessibility standards are checked THEN the System SHALL comply with WCAG guidelines for keyboard navigation and screen readers
+
+### Requirement TR-9: Langfuse Integration with Parlant
+
+**Description:** The system SHALL ensure Langfuse can monitor and analyze agent compliance with Parlant guidelines and instructions.
+
+#### Acceptance Criteria
+
+1. WHEN agents execute THEN the System SHALL create detailed traces in Langfuse showing all guideline applications and decision points
+2. WHEN Langfuse detects non-compliance patterns THEN the System SHALL flag guideline violations in trace analysis
+3. WHEN Parlant guidelines are updated based on Langfuse insights THEN the System SHALL maintain version history and track effectiveness through trace comparison
+4. WHEN agents deviate from intended behavior THEN the System SHALL record these deviations in Langfuse traces for review
+5. WHEN instruction following is measured THEN the System SHALL track compliance rates and correlate with quality metrics in Langfuse
+
+### Requirement TR-10: Instruction Following Monitoring via Langfuse
+
+**Description:** The system SHALL provide mechanisms through Langfuse to measure and improve how well agents follow prompts and instructions.
+
+#### Acceptance Criteria
+
+1. WHEN agents receive prompts THEN the System SHALL create detailed traces in Langfuse showing the original prompt content and agent response
+2. WHEN instruction compliance is evaluated THEN the System SHALL use Langfuse analytics to assess adherence to prompts
+3. WHEN suboptimal instruction following is detected THEN Langfuse SHALL identify specific prompt elements that lead to poor compliance through trace analysis
+4. WHEN prompt templates are optimized THEN the System SHALL use Langfuse A/B testing capabilities to compare different prompt structures for improved instruction following
+5. WHEN agent performance is analyzed THEN the System SHALL use Langfuse to correlate instruction following metrics with overall response quality scores
+
+### Requirement TR-11: User Feedback Integration with Langfuse Trace Analysis
+
+**Description:** The system SHALL connect user feedback (voting up/down) on RAG answers with trace logs in Langfuse to enable prompt improvements.
+
+#### Acceptance Criteria
+
+1. WHEN users provide feedback via upvote/downvote THEN the System SHALL create a trace in Langfuse linking the feedback to the specific answer generation trace
+2. WHEN negative user feedback (downvote) is received THEN the System SHALL tag the associated generation trace in Langfuse for prompt improvement analysis
+3. WHEN positive user feedback (upvote) is received THEN the System SHALL tag the associated generation trace in Langfuse as successful prompt execution
+4. WHEN Langfuse performs analysis THEN the System SHALL correlate user voting patterns with specific prompt elements to identify optimization opportunities
+5. WHEN prompt improvements are implemented THEN the System SHALL track the effectiveness of changes through continued user feedback and trace analysis
