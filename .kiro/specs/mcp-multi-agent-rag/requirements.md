@@ -11,9 +11,8 @@ This document specifies the requirements for an MCP-Based Multi-Agent RAG (Retri
 - **MCP (Model Context Protocol)**: A communication protocol for coordinating agent interactions and tool access
 - **RAG (Retrieval-Augmented Generation)**: A technique combining document retrieval with LLM generation
 - **LOB (Line of Business)**: A business domain or data source (e.g., Inventory, Orders, Support)
-- **Parlant**: A routing and prompt management framework with guideline-based decision making
+- **Parlant**: A routing and prompt management framework and agent runtime with guideline-based decision making
 - **Langfuse**: An observability and tracing platform for LLM applications
-- **Micorosoft Agent Framework**: A document multi-agent orchestration framework
 - **Zilliz/Milvus**: A document embedding, indexing, and storage tool
 - **RAGAS**: A framework for evaluating RAG system quality (faithfulness, relevance, correctness)
 - **HIL (Human-in-the-Loop)**: A workflow pattern where humans validate or correct agent decisions
@@ -103,12 +102,12 @@ High-quality intent statements should be:
 
 ### Requirement 6: Quality Evaluation with Seven RAG Characteristics
 
-**User Story:** As a quality assurance engineer, I want comprehensive quality checks on every answer, so that low-quality responses are caught before reaching users.
+**User Story:** As a quality assurance engineer, I want comprehensive quality checks on every answer through Langfuse, so that low-quality responses are caught before reaching users.
 
 #### Acceptance Criteria
 
-1. WHEN an answer is generated THEN the Evaluator Agent SHALL score faithfulness using RAGAS metrics
-2. WHEN evaluating quality THEN the System SHALL assess relevance, correctness, coverage, consistency, freshness, and traceability
+1. WHEN an answer is generated THEN the System SHALL submit the answer to Langfuse for scoring of faithfulness using RAGAS metrics
+2. WHEN evaluating quality THEN the System SHALL use Langfuse to assess relevance, correctness, coverage, consistency, freshness, and traceability
 3. WHEN quality scores are below threshold THEN the System SHALL route the answer to Human Review
 4. WHEN quality scores exceed threshold THEN the System SHALL return the answer to the user with confidence indicators
 5. WHEN evaluation completes THEN the System SHALL log all quality metrics to Langfuse for monitoring and analysis
@@ -273,7 +272,7 @@ High-quality intent statements should be:
 1. WHEN human feedback is collected THEN the System SHALL create complete traces in Langfuse with context and metrics
 2. WHEN feedback patterns are identified THEN the System SHALL aggregate data in Langfuse for trend analysis
 3. WHEN Langfuse requests data THEN the System SHALL provide complete trace information with priority levels and component associations
-4. WHEN quality issues are detected THEN the System SHALL tag affected components (Evaluator, Generator, Orchestrator) in traces for targeted improvements
+4. WHEN quality issues are detected THEN the System SHALL tag affected components (Generator, Orchestrator, System) in traces for targeted improvements
 5. WHEN improvement recommendations are generated THEN the System SHALL support automated prompt optimization and routing policy updates
 
 ### Requirement TR-4: Frontend Technology Stack

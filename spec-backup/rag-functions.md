@@ -77,14 +77,3 @@ You’re right—query construction belongs in the RAG flow. Here’s the comple
 - **Retrieve:** Hybrid search, rerank (LLM/fusion), active KG retrieval.
 - **Index:** Chunking, semantic splits, parent-doc, specialized embeddings, RAPTOR, metadata, sparse.
 
-
-| RAG Function                     | Corresponding Agent          | LLM Model Needed         |
-|----------------------------------|------------------------------|--------------------------|
-| Query construction                | Intent Parser Agent          | GPT-4                    |
-| Query translation                 | Knowledge Retriever Agent     | GPT-4                    |
-| Routing                           | Orchestrator Agent           | GPT-4                    |
-| Retrieval                         | Knowledge Retriever Agent     | GPT-4                    |
-| Indexing                          | Knowledge Retriever Agent     | GPT-4                    |
-| Generation                        | Answer Generator Agent        | GPT-4                    |
-
----

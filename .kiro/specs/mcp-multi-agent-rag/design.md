@@ -1,9 +1,9 @@
 # Design Document: Context-Aware Agentic RAG System
 
-**Version:** 12.1 (Human Review Interface Update)
+**Version:** 12.5 (Parlant Runtime Design Update)
 **Date:** November 25, 2025
 **Pattern:** Stateful Orchestration + Tri-Store Data Architecture
-**Framework:** Microsoft Agent Framework + MCP + Parlant + Langfuse + RAGAS + Agent Lightning
+**Framework:** Parlant + MCP + Langfuse + RAGAS
 **Components:** Orchestrator Engine + Intelligent Ingestion + Zilliz Cloud
 
 ## 1. Executive Summary
@@ -12,18 +12,20 @@ The System is an enterprise-grade RAG platform designed to eliminate the "Bureau
 
 **Key Architectural Decisions:**
 1.  **Orchestration:** A **Context-Aware Orchestrator** utilizes a "Refinement Loop" to clarify intent, including specialized intents like **Data Stories** and **Persona-Aware Visualizations**.
-2.  **Dual-Mode Evaluation:** The system dynamically routes responses based on risk, with a robust Human-in-the-Loop (HIL) workflow for quality assurance.
+2.  **Quality Assurance:** The system uses Langfuse for real-time evaluation of 7 RAG characteristics (faithfulness, relevance, correctness, coverage, consistency, freshness, and traceability) with a robust Human-in-the-Loop (HIL) workflow for quality assurance.
 3.  **Data Architecture (Tri-Store):** PostgreSQL (Control), ClickHouse (Data), Zilliz Cloud (Vector).
 4.  **Hybrid AI Strategy:** GPT-4o for Reasoning Agents; Llama-3.1 for Ingestion ETL.
-5.  **Continuous Improvement:** A full feedback loop powered by **Agent Lightning** and **LightningStore** ensures that prompts and routing logic improve over time.
+5.  **Continuous Improvement:** A full feedback loop powered by **Langfuse** analysis ensures that prompts and routing logic improve over time through user feedback and trace analysis.
 6.  **Comprehensive Observability:** **Langfuse** provides end-to-end tracing of all agent and tool operations.
 7.  **Human Feedback Integration:** A dedicated **Human Review Interface** (not requiring LLM processing) integrates with CopilotKit UI to collect user feedback for system improvement through voting and review mechanisms.
+8.  **Langfuse-Driven Optimization:** Langfuse traces and user feedback are analyzed to identify optimization opportunities and automatically improve system performance.
+9.  **Parlant-Guided Generation:** Generator Agent utilizes prompt templates guided by Parlant guidelines to ensure compliance with system policies and quality standards.
 
 ---
 
 ## 2. Architecture Topology
 
-**Correction:** The diagram is updated to include the `Human Review Interface`, `Agent Lightning` feedback loop, and `Langfuse` for observability.
+**Correction:** The diagram is updated to show `Langfuse` as the central observability and optimization platform that analyzes traces and user feedback to improve system performance.
 
 ```mermaid
 graph TD
@@ -31,7 +33,6 @@ graph TD
     classDef llm fill:#A5D6A7,stroke:#2E7D32,stroke-width:2px,color:black;
     classDef storage fill:#E1F5FE,stroke:#0277BD,stroke-width:2px,color:black;
     classDef hil fill:#FFDDC1,stroke:#D35400,stroke-width:2px,color:black;
-    classDef feedback fill:#D2B4DE,stroke:#5B2C6F,stroke-width:2px,color:black;
     classDef obs fill:#FADBD8,stroke:#B03A2E,stroke-width:2px,color:black;
 
     %% Users & Frontend
@@ -41,8 +42,7 @@ graph TD
     %% Application Layer (The Brain)
     subgraph "Application Layer (Azure OpenAI)"
         Orchestrator["<B>Orchestrator Agent</B><br/>(Intent, Risk & Planning)"]:::llm
-        Generator["<B>Generator Agent</B><br/>(Synthesis & citations)"]:::llm
-        Evaluator["<B>Evaluator Agent</B><br/>(Judge & Coach)"]:::llm
+        Generator["<B>Generator Agent</B><br/>(Synthesis & citations using Parlant-guided prompts)"]:::llm
         HumanReview["<B>Human Review Interface</B><br/>(HIL UI Component)"]:::hil
     end
 
@@ -54,16 +54,19 @@ graph TD
 
     %% Storage Layer
     subgraph "Storage Layer"
-        PG[("<B>PostgreSQL</B>")]:::storage
+        PG[("<B>PostgreSQL<br/>(Control)</B>")]:::storage
         CH[("<B>ClickHouse</B>")]:::storage
         Zilliz[("<B>Zilliz Cloud</B>")]:::storage
-        LightningStore[("<B>LightningStore</B>")]:::feedback
     end
 
-    %% Observability & Feedback
+    %% Policy & Guidelines
+    subgraph "Policy & Guidelines"
+        Parlant[("<B>Parlant</B><br/>Guidelines & Prompt Management")]:::feedback
+    end
+
+    %% Observability & Improvement
     subgraph "Observability & Improvement"
-        AgentLightning["<B>Agent Lightning</B><br/>(Prompt & Logic Optimizer)"]:::feedback
-        Langfuse[("<B>Langfuse</B><br/>Observability Platform")]:::obs
+        Langfuse[("<B>Langfuse</B><br/>Observability & Optimization Platform")]:::obs
     end
 
     %% --- Data Retrieval Flow ---
@@ -75,37 +78,41 @@ graph TD
     %% --- Synthesis & Delivery Flow ---
     Orchestrator -- "Raw Data + Risk Mode" --> Generator
 
-    %% Path A: Low Risk (Parallel / Observer)
+    %% Path A: Low Risk (Direct Delivery)
+    Generator -- "Parlant-Guided Prompt Request L Risk" --> Parlant
+    Parlant -- "Optimized Prompt Template" --> Generator
+    Generator -- "Stream Tokens + Trace" --> Langfuse
     Generator -- "Stream Tokens" --> FE
-    Generator -. "Async Review" .-> Evaluator
-    Evaluator -. "Log Metrics" .-> Langfuse
-    Evaluator -.->|Feedback| LightningStore
 
-    %% Path B: High Risk (Blocking / Gatekeeper)
-    Generator -- "Draft Answer" --> Evaluator
-    Evaluator -- "Needs Review" --> HumanReview
-    HumanReview -- "Feedback Data" --> LightningStore
+    %% Path B: High Risk (Post-generation Review)
+    Generator -- "Parlant-Guided Prompt Request H Risk" --> Parlant
+    Parlant -- "Optimized Prompt Template" --> Generator
+    Generator -- "Draft Answer + Quality Trace" --> Langfuse
+    Langfuse -- "Quality Assessment Results" --> Generator
+    Generator -- "Needs Review" --> HumanReview
+    HumanReview -- "Feedback Data" --> Langfuse
     HumanReview -- "Approved" --> FE
-    Evaluator -- "Approved" --> FE
 
     %% --- Feedback Loop ---
-    LightningStore --> AgentLightning
-    AgentLightning -- "Optimized Prompts/Logic" --> Orchestrator
-    AgentLightning -- "Optimized Prompts/Logic" --> Generator
+    Langfuse -- "Optimized Guidelines/Prompts" --> Parlant
+    Parlant -- "Updated Prompt Templates" --> Orchestrator
+    Parlant -- "Updated Prompt Templates" --> Generator
 
     %% --- Observability ---
     Orchestrator -- "Trace" --> Langfuse
     Generator -- "Trace" --> Langfuse
-    Evaluator -- "Trace" --> Langfuse
     T_Context -- "Trace" --> Langfuse
     T_Exec -- "Trace" --> Langfuse
 ```
 
 **Key Data Flow Changes:**
-- The `Human Review Interface` now acts as a UI component to facilitate human feedback collection (voting, approval, correction)
-- It does NOT perform any LLM-based processing itself but simply collects and forwards user feedback
-- Feedback data is stored in `LightningStore` for analysis by `Agent Lightning` to improve system performance
+- The `Generator Agent` now requests prompt templates from **Parlant** to ensure compliance with system policies and guidelines
+- **Parlant** provides optimized prompt templates based on the request context and system requirements
+- Langfuse performs real-time evaluation of generated responses for the 7 RAG characteristics (faithfulness, relevance, correctness, coverage, consistency, freshness, and traceability)
+- The `Human Review Interface` acts as a UI component to facilitate human feedback collection (voting, approval, correction) when Langfuse identifies quality concerns
+- User feedback (upvote/downvote) is directly linked to generation traces in Langfuse for prompt improvement analysis
 - The interface integrates with `CopilotKit UI` to provide a seamless user experience for feedback collection
+- Langfuse provides optimization feedback to **Parlant** to improve guidelines and prompt templates over time
 
 ---
 
@@ -130,7 +137,7 @@ class OrchestratorAgent:
     def __init__(self, tools, memory, prompt_optimizer):
         self.tools = tools
         self.memory = memory
-        self.prompt_optimizer = prompt_optimizer # From Agent Lightning
+        self.prompt_optimizer = prompt_optimizer # From Langfuse analysis
 
     async def run_loop(self, user_input: str, session_id: str) -> str:
         """
@@ -165,12 +172,12 @@ class OrchestratorAgent:
 
 ### 4.2. Generator Agent (The Synthesizer)
 **Role:** Composes answers, data stories, or visualizations and manages the output stream.
-**Prompt Optimization:** Uses optimized prompts provided by **Agent Lightning**.
+**Prompt Optimization:** Uses optimized prompts identified through **Langfuse** analysis.
 
 ```python
 class GeneratorAgent:
     async def synthesize(self, query: str, outputs: List, evaluation_mode: str, intent: Intent):
-        # 1. Select prompt based on intent and Agent Lightning optimization
+        # 1. Select prompt based on intent and Langfuse optimization
         system_prompt = self.prompt_optimizer.get_prompt("synthesis", intent.type)
 
         # 2. Generate content based on intent
@@ -181,39 +188,32 @@ class GeneratorAgent:
         else:
             draft_content = await self.llm.generate(system_prompt, user_input=query, context=outputs)
 
-        # 3. Risk Branching
+        # 3. Quality Assessment via Langfuse
+        # Create generation trace for Langfuse evaluation
+        generation_trace = self.langfuse_client.trace(
+            name="answer_generation",
+            input={"query": query, "context": outputs},
+            output={"answer": draft_content},
+            metadata={"evaluation_mode": evaluation_mode, "intent": intent.type}
+        )
+
+        # Submit for Langfuse evaluation of 7 RAG characteristics
+        # This includes faithfulness, relevance, correctness, coverage, consistency, freshness, and traceability
+        await self.submit_for_langfuse_evaluation(generation_trace.id, query, draft_content, outputs)
+
+        # For HIGH RISK mode, wait for quality assessment from Langfuse
         if evaluation_mode == "HIGH (GATEKEEPER)":
-            return await evaluator_agent.judge(query, draft_content, blocking=True)
-        else: # "LOW (OBSERVER)"
-            asyncio.create_task(evaluator_agent.judge(query, draft_content, blocking=False))
-            return draft_content
-```
-
-### 4.3. Evaluator Agent (Dual-Mode Judge)
-
-**Role:** Acts as either a **Gatekeeper** (Blocking) or a **Coach** (Non-Blocking Observer).
-**Metrics:** Assesses responses against seven key RAG characteristics: **faithfulness, relevance, correctness, coverage, consistency, freshness, and traceability.**
-
-**Workflow:**
-```python
-class EvaluatorAgent:
-    async def judge(self, query: str, answer: str, blocking: bool) -> Union[str, None]:
-        # 1. Evaluate using RAGAS and other custom checks for the 7 characteristics
-        metrics = await self.calculate_metrics(query, answer)
-        
-        # 2. Decision Logic
-        if metrics['overall_score'] < 0.8:
-            if blocking:
+            quality_result = await self.get_langfuse_quality_assessment(generation_trace.id)
+            if quality_result['overall_score'] < 0.8:
                 # Route to Human Review for correction
-                return await human_review_agent.review(query, answer, metrics)
-            else:
-                # Observer Mode: Log and Learn
-                await self.log_feedback_to_lightning_store(...)
-                return None
-        return answer
+                return await human_review_interface.review(query, draft_content, quality_result)
+
+        # Stream response to user
+        return draft_content
 ```
 
-### 4.4. Human Review Interface (HIL UI Component)
+
+### 4.3. Human Review Interface (HIL UI Component)
 **Role:** Facilitates human validation of low-quality or high-risk answers through UI interactions, collects user feedback for system improvement. This component does NOT use LLM processing but serves as an interface between users and the feedback storage system.
 
 **Workflow:**
@@ -225,8 +225,8 @@ class HumanReviewInterface:
         # 2. Collect human feedback (approval, rejection, voting, or optional correction).
         feedback = await self.wait_for_user_feedback() # Blocks until feedback is complete
 
-        # 3. Store the feedback data (query, original answer, user feedback, metrics) in LightningStore.
-        await self.log_to_lightning_store(query, answer, feedback, metrics)
+        # 3. Store the feedback data (query, original answer, user feedback, Langfuse quality metrics) in Langfuse.
+        await self.log_to_langfuse(query, answer, feedback, metrics)
 
         # 4. Return the approved answer to the user or handle rejection appropriately.
         if feedback['action'] == 'approve':
@@ -238,8 +238,8 @@ class HumanReviewInterface:
             return "Response was not approved due to quality concerns."
 ```
 
-### 4.5. Human Feedback Data Schema for Agent Lightning
-**Purpose:** To provide a structured format for collecting and storing human feedback that can be analyzed by Agent Lightning to improve system performance.
+### 4.4. Human Feedback Data Schema for Langfuse Integration
+**Purpose:** To provide a structured format for collecting and storing human feedback that can be analyzed by Langfuse to improve system performance.
 
 **Data Schema:**
 ```python
@@ -250,7 +250,7 @@ class HumanFeedback(BaseModel):
     timestamp: datetime
     query: str
     original_answer: str
-    answer_metrics: Dict[str, float]  # Original evaluation metrics from Evaluator Agent
+    answer_metrics: Dict[str, float]  # Original evaluation metrics from Langfuse
     user_action: Literal['approve', 'reject', 'correct', 'upvote', 'downvote']
     user_comment: Optional[str] = None
     corrected_answer: Optional[str] = None  # Filled when user provides correction
@@ -258,23 +258,23 @@ class HumanFeedback(BaseModel):
     user_profile: Dict[str, Any]  # Anonymous user metadata for context
 
 class FeedbackAggregation(BaseModel):
-    """Schema for aggregated feedback data used by Agent Lightning"""
+    """Schema for aggregated feedback data used for Langfuse analysis"""
     aggregation_id: UUID
     feedback_type: Literal['quality_issue', 'factual_error', 'relevance_problem', 'other']
     pattern: str  # Common patterns identified in feedback
     frequency: int  # How often this pattern occurs
     impact_score: float  # How much this pattern affects overall performance
     suggested_improvement: str  # Recommendations for system improvement
-    affected_components: List[Literal['Evaluator', 'Generator', 'Orchestrator']]  # Which components need adjustment
+    affected_components: List[Literal['Generator', 'Orchestrator', 'System']]  # Which components need adjustment
 ```
 
-**Message Schema for Agent Lightning Integration:**
+**Message Schema for Langfuse Integration:**
 ```python
 class FeedbackMessage(BaseModel):
-    """Message format sent to Agent Lightning for processing"""
+    """Message format sent to Langfuse for processing"""
     message_id: UUID
     message_type: Literal['human_feedback', 'aggregated_insights', 'trend_analysis']
-    source_component: Literal['HumanReviewInterface', 'EvaluatorAgent', 'SystemMonitor']
+    source_component: Literal['HumanReviewInterface', 'GeneratorAgent', 'SystemMonitor']
     payload: Union[HumanFeedback, FeedbackAggregation]
     processing_priority: Literal['high', 'medium', 'low']
     created_at: datetime
@@ -573,7 +573,7 @@ class RetrievalResult(BaseModel):
     provenance: Dict[str, Any]  # {table: "std_sales", confidence: 0.9}
 
 class EvaluationResult(BaseModel):
-    """Output from Evaluator Agent"""
+    """Output from Langfuse evaluation"""
     score: float = Field(ge=0.0, le=1.0)
     passed: bool
     reasoning: str
@@ -586,7 +586,7 @@ class HumanFeedback(BaseModel):
     timestamp: datetime
     query: str
     original_answer: str
-    answer_metrics: Dict[str, float]  # Original evaluation metrics from Evaluator Agent
+    answer_metrics: Dict[str, float]  # Original evaluation metrics from Langfuse
     user_action: Literal['approve', 'reject', 'correct', 'upvote', 'downvote']
     user_comment: Optional[str] = None
     corrected_answer: Optional[str] = None  # Filled when user provides correction
@@ -594,20 +594,20 @@ class HumanFeedback(BaseModel):
     user_profile: Dict[str, Any]  # Anonymous user metadata for context
 
 class FeedbackAggregation(BaseModel):
-    """Schema for aggregated feedback data used by Agent Lightning"""
+    """Schema for aggregated feedback data used for Langfuse analysis"""
     aggregation_id: UUID
     feedback_type: Literal['quality_issue', 'factual_error', 'relevance_problem', 'other']
     pattern: str  # Common patterns identified in feedback
     frequency: int  # How often this pattern occurs
     impact_score: float  # How much this pattern affects overall performance
     suggested_improvement: str  # Recommendations for system improvement
-    affected_components: List[Literal['Evaluator', 'Generator', 'Orchestrator']]  # Which components need adjustment
+    affected_components: List[Literal['Generator', 'Orchestrator', 'System']]  # Which components need adjustment
 
 class FeedbackMessage(BaseModel):
-    """Message format sent to Agent Lightning for processing"""
+    """Message format sent to Langfuse for processing"""
     message_id: UUID
     message_type: Literal['human_feedback', 'aggregated_insights', 'trend_analysis']
-    source_component: Literal['HumanReviewInterface', 'EvaluatorAgent', 'SystemMonitor']
+    source_component: Literal['HumanReviewInterface', 'GeneratorAgent', 'SystemMonitor']
     payload: Union[HumanFeedback, FeedbackAggregation]
     processing_priority: Literal['high', 'medium', 'low']
     created_at: datetime
@@ -617,11 +617,23 @@ class FeedbackMessage(BaseModel):
 
 ## 9. Infrastructure Stack (Docker & Cloud)
 
-Updated to include Langfuse, Agent Lightning, and LightningStore.
+Updated to include Langfuse, Agent Lightning, and LightningStore schema within PostgreSQL.
 
 ```yaml
 # ... (services for backend, ingestion-worker, clickhouse, postgres, redis, ollama, parlant)
-  
+
+  # --- Core Infrastructure ---
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: main_db
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+    volumes:
+      - ./init-lightning-schema.sql:/docker-entrypoint-initdb.d/10-lightning-schema.sql
+    ports:
+      - "5432:5432"
+
   # --- Observability ---
   langfuse-server:
     image: langfuse/langfuse-server:latest
@@ -632,35 +644,109 @@ Updated to include Langfuse, Agent Lightning, and LightningStore.
   agent-lightning:
     build: ./agent-lightning
     environment:
-      - LIGHTNING_STORE_URI=...
-  
-  lightning-store: # e.g., another Postgres or specialized DB
-    image: postgres:15
-    environment:
-      POSTGRES_DB: lightning
+      - LIGHTNING_STORE_URI=postgresql://user:password@postgres:5432/main_db?options=-c%20search_path=lightning
+      - PROMPT_OPTIMIZATION_INTERVAL=300  # seconds
+      - FEEDBACK_ANALYSIS_BATCH_SIZE=1000
+      - DATABASE_CONNECTION_POOL_SIZE=10
 ```
----
-## 10. Testing Strategy
 
-### 10.1. Property-Based Testing (Hypothesis)
+## 10. Langfuse Integration for Optimization
+
+### 10.1. User Feedback Integration with Langfuse Tracing
+
+The system connects user feedback (voting up/down) on RAG answers directly with trace logs in Langfuse to enable prompt improvements.
+
+**Trace Structure:**
+Langfuse maintains comprehensive traces that connect user feedback to specific answer generation:
+
+```python
+class LangfuseTraceUpdater:
+    def __init__(self, langfuse_client):
+        self.langfuse_client = langfuse_client
+
+    async def link_user_feedback_to_trace(self, trace_id: str, feedback: HumanFeedback):
+        """
+        Link user feedback directly to the generation trace for analysis
+        """
+        # Update the original generation trace with user feedback
+        generation_trace = self.langfuse_client.trace(
+            id=trace_id,
+            tags=["feedback-linked"],
+            metadata={
+                "user_action": feedback.user_action,
+                "upvote": feedback.user_action == 'upvote',
+                "downvote": feedback.user_action == 'downvote',
+                "user_comment": feedback.user_comment
+            }
+        )
+
+        # Add feedback-specific scoring to the trace
+        generation_trace.score(
+            name="user_satisfaction",
+            value=1 if feedback.user_action in ['approve', 'upvote'] else 0,
+            comment=f"User {feedback.user_action} on generated answer"
+        )
+
+    async def analyze_feedback_patterns(self):
+        """
+        Analyze patterns in user feedback to identify optimization opportunities
+        """
+        # Use Langfuse's analytics capabilities to identify:
+        # - prompts that regularly receive negative feedback
+        # - generation patterns associated with positive feedback
+        # - components that correlate with feedback patterns
+        pass
+```
+
+**Feedback-Driven Prompt Optimization:**
+1. **Tagging traces:** When users vote (upvote/downvote), the system tags the associated generation trace in Langfuse
+2. **Negative feedback analysis:** Downvoted answers are flagged for prompt improvement analysis
+3. **Positive feedback reinforcement:** Upvoted answers are tagged as successful prompt execution
+4. **Pattern correlation:** Langfuse correlates user voting patterns with specific prompt elements
+5. **A/B testing:** Langfuse manages A/B testing of different prompt versions based on user feedback
+
+### 10.2. Langfuse Analytics for System Improvement
+
+Langfuse serves as the central platform for analyzing both traces and user feedback to identify optimization opportunities:
+
+1. **Prompt Analysis:** Langfuse identifies which prompt elements correlate with positive user feedback
+2. **Component Analysis:** Individual agent performance is tracked relative to user satisfaction
+3. **Trend Detection:** Long-term trends in user satisfaction help identify systemic issues
+4. **Automated Improvements:** Optimized prompts and configurations are deployed based on Langfuse analysis
+5. **Performance Tracking:** The effectiveness of changes is continuously monitored through continued feedback
+
+### 10.3. Parlant Integration with Langfuse
+
+Langfuse monitors and analyzes agent compliance with Parlant guidelines and instructions:
+
+**Trace Monitoring:**
+1. **Guideline Application:** All guideline applications are traced with detailed decision points
+2. **Non-compliance Detection:** Langfuse flags patterns of guideline violations
+3. **Guideline Effectiveness:** Version history and effectiveness of guidelines are tracked
+4. **Behavior Deviations:** Agent deviations from intended behavior are recorded in traces
+5. **Instruction Following:** Compliance rates are tracked and correlated with quality metrics
+---
+## 11. Testing Strategy
+
+### 11.1. Property-Based Testing (Hypothesis)
 We test the Orchestrator's *decision logic* without making real API calls.
 
 ```python
 @given(query=st.text())
 async def test_orchestrator_triage(query):
     """
-    Property: If query is vague (no specific entities), Orchestrator MUST 
+    Property: If query is vague (no specific entities), Orchestrator MUST
     call Semantic Tools OR ask clarification, NEVER execute deep search immediately.
     """
     orch = OrchestratorAgent()
     response = await orch.dry_run(query)
-    
+
     if is_vague(query):
         assert response.tool_calls[0].name in ["get_domain_context", "get_schema_info"]
         assert response.tool_calls[0].name not in ["execute_clickhouse"]
 ```
 
-### 10.2. Integration Testing (End-to-End)
+### 11.2. Integration Testing (End-to-End)
 **Scenario:** "The FinOps Flow"
 1.  **Ingest:** Upload `expenses_2024.csv` (Columns: `v_amt`, `ven_name`).
 2.  **Verify MDM:**
@@ -675,7 +761,21 @@ async def test_orchestrator_triage(query):
     *   Agent: Calls `execute_clickhouse("SELECT Vendor, SUM(Amount)...")`.
     *   Agent: Generator synthesizes response with source citation.
 
+### 11.3. Langfuse Feedback Integration Testing
+**Scenario:** "Feedback-Driven Optimization"
+1.  **Feedback Collection:** Simulate 1000 feedback events with quality issues in generated answers.
+2.  **Trace Linking:** Verify user feedback (upvote/downvote) is properly linked to generation traces in Langfuse.
+3.  **Prompt Optimization:** Check that Langfuse identifies optimization opportunities based on user feedback patterns.
+4.  **Performance Improvement:** Measure improvement in quality metrics after applying optimized prompts through Langfuse analysis.
+
+### 11.4. Langfuse Trace Analysis Testing
+**Scenario:** "Trace-Driven Optimization"
+1.  **Trace Analysis:** Verify Langfuse can extract insights from traces to identify optimization opportunities.
+2.  **Feedback Correlation:** Test that user feedback patterns are properly correlated with trace data in Langfuse.
+3.  **Guideline Compliance:** Validate that Langfuse monitors and analyzes agent compliance with Parlant guidelines.
+4.  **Proactive Optimization:** Measure system improvements from optimizations based on trace analysis and user feedback correlation.
+
 ---
 
 *Last Updated: 2025-11-25*
-*Version: 12.0*
+*Version: 12.4*
